@@ -6,5 +6,7 @@ public class Code01 {
 		System.out.println("なまえ");
 		System.out.println("31歳です");
 		System.out.println("お酒が好きです");
+		System.out.println("31 + 31の計算をします");
+		System.out.println(31 + 31);
 	}
 }
