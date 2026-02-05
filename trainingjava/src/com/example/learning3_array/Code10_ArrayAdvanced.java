@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning3_array;
 
-public class Code10 {
+public class Code10_ArrayAdvanced {
 	public static void main(String[] args) {
 		int[][] scores = {{20,30,50},{80,90,100}};
 		System.out.println(scores.length);

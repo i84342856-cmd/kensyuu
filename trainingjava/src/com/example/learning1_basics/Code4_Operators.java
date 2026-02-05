@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning1_basics;
 
-public class Code4 {
+public class Code4_Operators {
 	public static void main(String[] args) {
 		int a = 5;
 		int b = 20;

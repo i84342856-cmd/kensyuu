@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning4_method;
 
-public class Code11 {
+public class Code11_MethodBasics {
 	public static void main(String[] args) {
 	hello();
 	methodA();

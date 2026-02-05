@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning1_basics;
 
-public class Code01 {
+public class Code1_Introduction {
 
 	public static void main(String[] args) {
 		System.out.println("なまえ");

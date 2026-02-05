@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning3_array;
 
-public class Code9 {
+public class Code9_ArrayBasics {
 	public static void main(String[] args) {
 		int[] scores = new int[5];
 		int num = scores.length;

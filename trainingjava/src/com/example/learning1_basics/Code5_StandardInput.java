@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning1_basics;
 
-public class Code5 {
+public class Code5_StandardInput {
 	public static void main(String[] args) {
 		String age = "31";
 		int n = Integer.parseInt(age);

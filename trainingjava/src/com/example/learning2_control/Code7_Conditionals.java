@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning2_control;
 
-public class Code7 {
+public class Code7_Conditionals {
 	public static void main(String[] args) {
 		boolean tenki = true;
 		if(tenki == true) {

@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning4_method;
 
-public class Code12 {
+public class Code12_MethodArguments {
 	public static void main(String[] args) {
 		System.out.println("メソッドを呼び出す");
 		go("港");

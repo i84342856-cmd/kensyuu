@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning1_basics;
 
-public class Code6 {
+public class Code6_FortuneGame {
 	public static void main(String[] args) {
 		System.out.println("ようこそ占いの館");
 		System.out.println("名前を入力");

@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning4_method;
 
-public class Code14 {
+public class Code14_MethodArrayReference {
 	public static void incArray(int[] array) {
 		for(int i = 0; i< array.length;i++) {
 			array[i]++;

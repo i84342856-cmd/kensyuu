@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning2_control;
 
-public class Code8 {
+public class Code8_LoopIteration {
 	public static void main(String[] args) {
 		for(int i = 0; i < 10; i++) {
 			System.out.println(i);

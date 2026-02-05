@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning4_method;
 
-public class Code13 {
+public class Code13_MethodReturnOverload {
 	public static int add(int x, int y) {
 		int ans = x + y;
 		return ans;

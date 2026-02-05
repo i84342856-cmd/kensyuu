@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning1_basics;
 
-public class Code3 {
+public class Code3_DataTypes {
 	public static void main(String[] args) {
 		boolean result = true;
 		char favoriteCharacter = '駆';

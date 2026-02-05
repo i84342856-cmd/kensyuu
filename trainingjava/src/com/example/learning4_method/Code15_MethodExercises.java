@@ -1,6 +1,6 @@
-package com.example.cp1;
+package com.example.learning4_method;
 
-public class Code15 {
+public class Code15_MethodExercises {
 	
 	// メール送信メソッド //
 	public static void email(String title, String address, String text) {
