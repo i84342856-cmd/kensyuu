@@ -11,6 +11,13 @@ public class Code4 {
 		int c = 100;
 		c++;
 		System.out.println(c);
+		int age = (int)3.2;
+		System.out.println(age);
+		/* キャスト演算子 エラーになるところを強制的に大きい型に変換する*/
+		double d = 8.5 / 2;
+		long l = 5 + 2L;
+		System.out.println(d);
+		System.out.println(l);
 	}
 
 }
