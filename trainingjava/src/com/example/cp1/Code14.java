@@ -15,6 +15,8 @@ public class Code14 {
 		return newArray;
 	}
 	
+	
+	
 	// 呼び出し元の配列のアドレスが呼び出し先の引数にコピーされる //
 	public static void main(String[] args) {
 		int[] array = {2,3,4};
