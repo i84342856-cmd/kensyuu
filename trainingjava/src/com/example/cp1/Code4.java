@@ -18,6 +18,12 @@ public class Code4 {
 		long l = 5 + 2L;
 		System.out.println(d);
 		System.out.println(l);
+		String msg = "私の年齢は" + 23;
+		System.out.println(msg);
+		int m = Math.max(a,b);
+		int e =5;
+		int f = 25;
+		System.out.println(e +"と"+ f +"とで大きいのは" + m);
 	}
 
 }
