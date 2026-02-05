@@ -7,6 +7,10 @@ public class Code4 {
 		b = a + b;
 		System.out.println(a);
 		System.out.println(b);
+		System.out.println("私の好きな記号は二重引用符（\")です");
+		int c = 100;
+		c++;
+		System.out.println(c);
 	}
 
 }
