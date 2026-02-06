@@ -4,7 +4,7 @@ public class Code22_main {
 	public static void main(String[] args) {
 		Code21_hero h = new Code21_hero();
 		h.name = "minato";
-		h.hp = 100;
+		System.out.println("コンストラクタの設定により、初期HP" + h.hp);
 		
 		Code23_matango m1 = new Code23_matango();
 		m1.hp = 50;
