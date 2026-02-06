@@ -5,10 +5,17 @@ public class Code21_hero {
 	int hp;
 	int level = 10; // 固定にするときは final 先頭につける //
 	
-	//　コンストラクタ
+	//　コンストラクタ（引数がない） //
 	public Code21_hero() {
 		this.hp = 100; // hpフィールドを100　初期化
 	}
+	
+	//　コンストラクタ（引数がある） //
+		public Code21_hero(String name) {
+			this.hp = 100; // hpフィールドを100　初期化
+			this.name = name;
+		}
+		
 	public void sleep() {
 		this.hp = 100;
 		System.out.println(this.name + "は、回復した");
@@ -30,4 +37,6 @@ public class Code21_hero {
 		System.out.println(this.name + " にげた");
 		System.out.println("HP " + this.hp);
 	}
+	
+
 }
