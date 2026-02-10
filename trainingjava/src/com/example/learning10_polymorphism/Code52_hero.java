@@ -5,5 +5,4 @@ public class Code52_hero {
 		System.out.println(this.name + "の攻撃");
 		m.jp -= 10;
 	}
-
 }

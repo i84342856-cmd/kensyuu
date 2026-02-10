@@ -5,7 +5,6 @@ public abstract class Code48_character {
 	int hp;
 	
 	public void run() {
-		
 	}
 	
 	public abstract void attack(Code51_matango m) ;
