@@ -1,4 +1,4 @@
-package com.example.EleventhAssignment;
+package com.example.chapter5.program2;
 
 public abstract class Shape implements Figure {
 	public abstract void draw() ;

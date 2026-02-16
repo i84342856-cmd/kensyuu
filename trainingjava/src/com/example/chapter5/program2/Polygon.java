@@ -1,4 +1,4 @@
-package com.example.EleventhAssignment;
+package com.example.chapter5.program2;
 
 public abstract class Polygon extends Shape{
 	protected int angle;  

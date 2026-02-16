@@ -1,4 +1,4 @@
-package com.example.EleventhAssignment;
+package com.example.chapter5.program2;
 
 public class Square extends Rectangle {
 	
