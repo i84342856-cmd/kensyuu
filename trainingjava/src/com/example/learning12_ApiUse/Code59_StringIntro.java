@@ -1,6 +1,6 @@
 package com.example.learning12_ApiUse;
 
-public class Code59_main {
+public class Code59_StringIntro {
 	public static void main(String[] args) {
 		String s1 = "JAVA";
 		String s2 = "java";

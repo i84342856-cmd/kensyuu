@@ -2,7 +2,7 @@ package com.example.learning12_ApiUse;
 
 import java.util.Date;
 
-public class Code60_main {
+public class Code60_StringMethod {
 	public static void main(String[] args) {
 		String s1 = "java and script java";
 		if(s1.contains("java")) {
