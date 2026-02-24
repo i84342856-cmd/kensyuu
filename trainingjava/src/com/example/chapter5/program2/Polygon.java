@@ -10,5 +10,4 @@ public abstract class Polygon extends Shape{
 	public int getInternalAngle() {
 		return (this.angle -2)*180;
 	}
-
 }

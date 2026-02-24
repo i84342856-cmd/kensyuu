@@ -22,5 +22,4 @@ public class Rectangle extends Polygon{
 	public double getPerimeter() {
 		return ( width + height ) * 2;
 	}
-
 }

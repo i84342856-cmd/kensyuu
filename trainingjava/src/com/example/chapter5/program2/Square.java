@@ -11,5 +11,4 @@ public class Square extends Rectangle {
 		System.out.println("[正方形を描画] 点((" + p.getX() + "," + p.getY() + ")を基準として幅・高さ" + 
 	                       this.width + "の正方形");
 	}
-	
 }

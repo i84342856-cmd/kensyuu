@@ -12,6 +12,7 @@ public class Main {
 		figures.add(new Square(7,7,10));
 		
 		
+		
 		for(Figure f : figures) {
 			f.draw();
 			double p = f.getPerimeter();
@@ -20,7 +21,7 @@ public class Main {
 				if(f instanceof Polygon) {
 					Polygon poly = (Polygon)f;
 					int a = poly.getInternalAngle();
-					System.out.println(f.getClass().getSimpleName() + "の内角の和: " + poly.getInternalAngle() + "度");
+					System.out.println(f.getClass().getSimpleName() + "の内角の和: " + a + "度");
 			}
 			System.out.println(" ");
 		}
