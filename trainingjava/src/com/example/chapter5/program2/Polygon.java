@@ -8,6 +8,6 @@ public abstract class Polygon extends Shape{
 	// draw() と getPerimeter() は自動的に abstract 扱い
 	
 	public int getInternalAngle() {
-		return (this.angle -2)*180;
+		return (this.angle - 2)*180;
 	}
 }
