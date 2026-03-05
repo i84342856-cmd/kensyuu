@@ -18,7 +18,7 @@ public class Circle extends Shape{
 		this.center.setY(y);
 		this.radius = r;
 	}
-	
+
 	public void draw() {
 		System.out.println("[円を描画] 中心点(" + center.getX() + "," + center.getY() + ")から半径" + this.radius);
 	}
