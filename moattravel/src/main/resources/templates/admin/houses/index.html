@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="https://www.thymeleaf.org">
+<html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 
 <head>
 	<div th:replace="~{fragment :: meta}"></div>
@@ -54,7 +54,7 @@
 							</thead>
 							<tbody>
 								<!--Java（Controller）から渡されたリスト等のデータを取り出し、HTMLの表の行として、th:each="変数名 : ${コレクション}  
-		  データの数だけ <tr>（行）が自動的にコピー -->
+									データの数だけ <tr>（行）が自動的にコピー -->
 								<tr th:each="house : ${housePage}">
 									<td th:text="${house.getId()}"></td>
 									<td th:text="${house.getName()}"></td>

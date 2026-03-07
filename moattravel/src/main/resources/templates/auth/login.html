@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html xmlns:th="https://www.thymeleaf.org">
+<html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
     <head>
         <div th:replace="~{fragment :: meta}"></div>
         <div th:replace="~{fragment :: styles}"></div>
@@ -7,32 +8,62 @@
     </head>
 
     <body>
+		<!-- ページ全体を包む独自のクラスを持つdivタグ -->
         <div class="moattravel-wrapper">
             <div th:replace="~{fragment :: header}"></div>
 
             <main>
-                <div class="container pt-4 pb-5 moattravel-container">
-                    <div class="row justify-content-center">
-                        <div class="col-xl-3 col-lg-4 col-md-5 col-sm-7">
+                <!-- Bootstrapのコンテナ。上下の余白（pt-4, pb-5）を設定 -->
+				<div class="container pt-4 pb-5 moattravel-container">
+                    <!-- コンテンツを中央に配置するための行（row） -->
+					<div class="row justify-content-center">
+                        <!-- 画面サイズに応じて幅を調整するカラム。中央に配置 -->
+						<div class="col-xl-3 col-lg-4 col-md-5 col-sm-7">
                             <h1 class="mb-4 text-center">ログイン</h1>
 
-                            <div th:if="${param.error}" class="alert alert-danger">
+    <!-- ${param.error} はどこから来ているのか？
+	この param は、Thymeleafが標準で用意している 「HTTPリクエストパラメータ」を参照するためのオブジェクトです。
+    仕組みの流れ
+	ログインに失敗したとき、背後で動いている Spring Security が自動的にエラー処理を行います。
+	ユーザーがログインボタンを押す（/login へPOST送信）。
+	認証に失敗すると、Spring Securityは /login?error というURLにリダイレクト（再表示）させます。
+	このURLの末尾にある ?error が「リクエストパラメータ」です。
+	Thymeleafの ${param.error} は、「URLに error というパラメータが含まれているか？」を判定しています。
+	補足: コントローラー（AuthController）で明示的に値を渡していなくても、Spring SecurityがURLを操作し、ThymeleafがそのURLを直接読み取っているため、この記述だけでエラー表示が可能になります。
+
+	name	データの識別名	最重要です。 サーバー側（Spring Security）はこの名前を見て、「これがユーザー名だ」
+	placeholder	入力ヒント	入力欄が空のときに薄く表示される説明テキストです（例：「メールアドレス」）。
+	autocomplete	自動補完	ブラウザに保存されているメールアドレスやパスワードを候補として出す機能です。email はメアド、current-password は現在のパスワードを提案させます。
+	autofocus	自動フォーカス	ページが開いた瞬間に、その入力欄にカーソルが自動で当たっている状態にします。ユーザーがいちいちクリックしなくて済むので親切です。-->
+                            
+	
+							 <!-- ログインに失敗してURLにerrorパラメータがついた時だけ表示される警告文 -->
+							 <div th:if="${param.error}" class="alert alert-danger">
                                 メールアドレスまたはパスワードが正しくありません。
                             </div>
 
-                            <form th:action="@{/login}" method="post">
-                                <div class="form-group mb-3">
-                                    <input type="text" class="form-control" name="username" autocomplete="email" placeholder="メールアドレス" autofocus>
+                            <!-- ログイン情報を送信するためのフォーム。/loginへPOST -->
+							<form th:action="@{/login}" method="post">
+                                
+								<!-- メールアドレス入力欄のグループ。下の余白（mb-3）を設定 -->
+								<div class="form-group mb-3">
+                                    <!-- メールアドレスを入力するテキストボックス。自動補完と自動フォーカス付き -->
+									<input type="text" class="form-control" name="username" autocomplete="email" placeholder="メールアドレス" autofocus>
                                 </div>
-                                <div class="form-group mb-3">
+								
+                                <!-- パスワード入力欄のグループです -->
+								<div class="form-group mb-3">
+									<!-- パスワードを入力する伏せ字（password型）の入力ボックス -->
                                     <input type="password" class="form-control" name="password" autocomplete="current-password" placeholder="パスワード">
                                 </div>
-
+								
+								 <!-- ログインボタンを中央寄せで配置するためのグループ -->
                                 <div class="form-group d-flex justify-content-center my-4">
                                     <button type="submit" class="btn text-white shadow-sm w-100 moattravel-btn">ログイン</button>
                                 </div>
                             </form>
-
+							
+							<!-- ログイン以外の動線を配置するテキストエリア -->
                             <div class="text-center">
                                 <a th:href="@{/signup}">会員登録</a>
                             </div>

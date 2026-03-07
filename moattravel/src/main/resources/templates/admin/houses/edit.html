@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html xmlns:th="https://www.thymeleaf.org">
+<html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
     <head>
         <div th:replace="~{fragment :: meta}"></div>
         <div th:replace="~{fragment :: styles}"></div>
@@ -14,47 +15,63 @@
                     <div class="row justify-content-center">
                         <div class="col-xl-5 col-lg-6 col-md-8">
                             
+							<!-- ページの現在位置を示すパンくずリストのナビゲーション -->
                             <nav class="mb-4" style="--bs-breadcrumb-divider: '>';" aria-label="breadcrumb">
-                                <ol class="breadcrumb mb-0">
+                                <!-- パンくずリストの項目を並べるリスト要素 -->
+								<ol class="breadcrumb mb-0">
                                     <li class="breadcrumb-item"><a th:href="@{/admin/houses}">民宿一覧</a></li>
+									<!-- 編集対象の民宿詳細ページへのリンク。IDを動的に埋め込んでいる -->
                                     <li class="breadcrumb-item"><a th:href="@{/admin/houses/__${houseEditForm.getId()}__}">民宿詳細</a></li>
-                                    <li class="breadcrumb-item active" aria-current="page">民宿情報編集</li>
+									<!-- 現在のページを示す「民宿情報編集」 -->
+									<li class="breadcrumb-item active" aria-current="page">民宿情報編集</li>
                                 </ol>
                             </nav>
-
+							
+							<!-- ページの中央に表示される -->
                             <h1 class="mb-4 text-center">民宿情報編集</h1>
-
+							
+							<!-- 民宿情報を送信するフォーム。画像送信のためenctypeを指定 -->
                             <form method="post" 
                                   th:action="@{/admin/houses/__${houseEditForm.getId()}__/update}" 
                                   th:object="${houseEditForm}" 
                                   enctype="multipart/form-data">
                                 
+								  <!-- 編集対象を識別するための隠しフィールド（ID）-->
                                 <input type="hidden" th:field="*{id}">
-
+								
+								<!-- 民宿名の入力行 -->
                                 <div class="form-group row mb-3">
                                     <div class="col-md-4">
                                         <label for="name" class="col-form-label text-md-left fw-bold">民宿名</label>
                                     </div>
                                     <div class="col-md-8">
+										<!-- 入力エラーがある場合に赤い文字でエラー内容を表示 -->
                                         <div th:if="${#fields.hasErrors('name')}" class="text-danger small mb-2" th:errors="*{name}"></div>
                                         <input type="text" class="form-control" th:field="*{name}" autofocus>
                                     </div>
                                 </div>
-
+								
+								<!-- 民宿画像のアップロード行 -->
                                 <div class="form-group row mb-3">
                                     <div class="col-md-4">
+										<!-- 画像選択用のラベル -->
                                         <label for="imageFile" class="col-form-label text-md-left fw-bold">民宿画像</label>
                                     </div>
                                     <div class="col-md-8">
-                                        <div th:if="${#fields.hasErrors('imageFile')}" class="text-danger small mb-2" th:errors="*{imageFile}"></div>
-                                        <input type="file" class="form-control" th:field="*{imageFile}">
+										<!-- 画像ファイルに関するバリデーションエラーを表示 -->
+										<div th:if="${#fields.hasErrors('imageFile')}" class="text-danger small mb-2" th:errors="*{imageFile}"></div>
+                                        <!-- ファイル選択のための入力欄 -->
+										<input type="file" class="form-control" th:field="*{imageFile}">
                                     </div>
                                 </div>
-
+								
+								<!-- 既に画像が存在する場合にプレビューを表示する -->
                                 <div th:if="${imageName}" class="row" id="imagePreview">
-                                    <img th:src="@{/storage/__${imageName}__}" class="mb-3">
+                                    <!-- 保存済みの画像パスを動的に生成して表示 -->
+									<img th:src="@{/storage/__${imageName}__}" class="mb-3">
                                 </div>
-                                <div th:unless="${imageName}" class="row" id="imagePreview"></div>
+                                <!-- 画像が存在しない場合にプレビュー枠だけを確保 -->
+								<div th:unless="${imageName}" class="row" id="imagePreview"></div>
 
                                 <div class="form-group row mb-3">
                                     <div class="col-md-4">
@@ -115,7 +132,8 @@
                                         <input type="text" class="form-control" th:field="*{phoneNumber}">
                                     </div>
                                 </div>
-
+								
+								<!-- 更新ボタンを配置するエリア -->
                                 <div class="form-group d-flex justify-content-center my-4">
                                     <button type="submit" class="btn text-white shadow-sm w-50 moattravel-btn">更新</button>
                                 </div>
