@@ -45,8 +45,20 @@ public class User {
 
     @ManyToOne
     @JoinColumn(name = "role_id")
-    private Role role;
+    private Role role; // Roleエンティティクラスのオブジェクトを定義、"role_id"　JoinColumnする。
+    
+    /* @JoinColumn(name = "role_id") というアノテーションが、橋渡し（翻訳）の役割をしています。
+		データの読み込み時:
+		Spring Data JPAがDBからユーザー情報を取ってくる際、role_id が 1 であることを見つけます。
 
+		自動的な検索:
+		JPAは「おっと、role_id は Role エンティティと紐付いているな」と判断し、JPAは「users テーブルの role_id に入っている番号を使って、
+		roles テーブルの id を探しに行けばいいんだな」と完璧に理解できるのです。裏側で勝手に SELECT * FROM roles WHERE id = 1 を実行します。
+
+		合体:
+		取得したRoleテーブルの情報を Role オブジェクトとして組み立て、User オブジェクトの role フィールドに「ガッチャンコ」とはめ込みます。
+     */
+    
     @Column(name = "enabled")
     private Boolean enabled;
 
