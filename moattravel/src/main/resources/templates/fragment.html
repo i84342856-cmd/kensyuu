@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html xmlns:th="https://www.thymeleaf.org">
+
+<!-- Thymeleaf（テンプレートエンジン）とSpring Security（ログイン管理）の機能を使うための定義 -->
+<html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
 
 <head>
 	<div th:fragment="meta" th:remove="tag">
@@ -8,26 +11,103 @@
 	</div>　
 
 	<div th:fragment="styles" th:remove="tag">
+		
+		<!-- Bootstrap 5（世界的に有名なデザインの枠組み）のCSSを読み込みます -->
 		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet"
 			integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
-
+		<!-- Google Fonts（フォント提供サービス）への接続準備設定 -->
 		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<!-- Google Fontsの静的配信サーバーへの事前接続設定 -->
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<!-- 日本語フォント「Noto Sans JP」の400（通常）と500（中太） -->
 		<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
 
 		<link th:href="@{/css/style.css}" rel="stylesheet">
 	</div>
-
+	
+	<!-- ブラウザのタブに表示されるタイトル  -->
 	<title>部品化用のHTMLファイル</title>
 </head>
 
 <body>
+	<!-- ヘッダーの部品化 -->
 	<div th:fragment="header" th:remove="tag">
+		<!-- Bootstrapのナビゲーションバー。白背景、小さな影付き、画面幅に応じて折りたたみ -->
 		<nav class="navbar navbar-expand-md navbar-light bg-white shadow-sm moattravel-navbar">
+			<!-- サイトのロゴやメニューを中央に寄せるための箱 -->
 			<div class="container moattravel-container">
+				<!-- サイトロゴ。クリックするとトップページ（/）へ戻るようにThymeleafのパスを設定 -->
 				<a class="navbar-brand" th:href="@{/}">
 					<img class="moattravel-logo me-1" th:src="@{/images/logo.png}" alt="moat Travel">
 				</a>
+				
+				<!-- スマホなどの画面が狭い時に表示される、メニューを開閉するための三本線ボタン -->
+				<button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+					data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+					aria-expanded="false" aria-label="Toggle navigation">
+					 <!-- ボタンの中に表示される三本線のアイコン -->
+					 <span class="navbar-toggler-icon"></span>
+				</button>
+				
+				<!-- メニューの中身。画面幅に応じて折りたたみ、または展開 -->
+				<div class="collapse navbar-collapse" id="navbarSupportedContent">
+					<!-- メニュー項目。ms-autoで右側に -->
+					<ul class="navbar-nav ms-auto">
+
+						 <!-- 未ログインの状態（Anonymous）の時だけ表示されるリスト項目 -->
+						 <li class="nav-item" sec:authorize="isAnonymous()">
+							<!-- ログインページへのリンク -->
+							<a class="nav-link" th:href="@{/login}">ログイン</a>
+						</li>
+						
+						<!-- 一般ユーザー（ROLE_GENERAL）としてログインしている時だけ表示されるドロップダウン項目 -->
+						<li class="nav-item dropdown" sec:authorize="hasRole('ROLE_GENERAL')">
+							<!-- ログインユーザーの名前を表示し、クリックするとメニューが開く親要素 -->
+							<a id="navbarDropdownGeneral" class="nav-link dropdown-toggle" href="#" role="button"
+								data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" v-pre>
+								<!-- Spring Securityから現在のログインユーザー名を動的に取得して表示 -->
+								<span sec:authentication="principal.user.name"></span>
+							</a>
+							
+							<!-- ドロップダウンメニューの内容。右端を揃える設定 -->
+							<div class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdownGeneral">
+								<!-- ログアウトボタン。クリック時に下の隠しフォームを送信するようJavaScriptが設定 -->
+								<a class="dropdown-item moattravel-dropdown-item" th:href="@{/logout}"
+									onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+									ログアウト
+								</a>
+								
+								<!-- セキュリティ上の理由でPOST方式でログアウトを送るための非表示フォーム -->
+								<form class="d-none" id="logout-form" th:action="@{/logout}" method="post"></form>
+							</div>
+						</li>
+						
+						<!-- 管理者（ROLE_ADMIN）としてログインしている時だけ表示されるドロップダウン項目 -->
+						<li class="nav-item dropdown" sec:authorize="hasRole('ROLE_ADMIN')">
+							 <!-- 「管理者メニュー」というテキストを表示する親要素 -->
+							 <a id="navbarDropdownAdmin" class="nav-link dropdown-toggle" href="#" role="button"
+								data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" v-pre>
+								管理者メニュー
+							</a>
+							
+							<!-- 管理者専用のメニュー内容 -->
+							<div class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdownAdmin">
+								<!-- 民宿一覧画面への管理ページリンク -->
+								<a class="dropdown-item moattravel-dropdown-item" th:href="@{/admin/houses}">民宿一覧</a>
+								<!-- メニュー項目を区切るための水平線 -->
+								<div class="dropdown-divider"></div>
+								<!-- 管理者用のログアウトボタン。同様に下のフォームを送信 -->
+								<a class="dropdown-item moattravel-dropdown-item" th:href="@{/logout}"
+									onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+									ログアウト
+								</a>
+								<!-- 管理者用の非表示ログアウトフォーム -->
+								<form class="d-none" id="logout-form" th:action="@{/logout}" method="post"></form>
+							</div>
+						</li>
+
+					</ul>
+				</div>
 			</div>
 		</nav>
 	</div>
@@ -40,7 +120,9 @@
 		</footer>
 	</div>
 
+	<!-- 動作に必要なJavaScriptファイルを「scripts」という名前の部品として定義 -->
 	<div th:fragment="scripts" th:remove="tag">
+		<!-- Bootstrap 5のドロップダウンなどの動作を可能にするためのJSファイルを読み込み -->
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
 			integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4"
 			crossorigin="anonymous"></script>
