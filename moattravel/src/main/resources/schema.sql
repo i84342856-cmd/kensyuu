@@ -37,4 +37,15 @@ CREATE TABLE IF NOT EXISTS users (
     FOREIGN KEY (role_id) REFERENCES roles (id)
 );
 
+-- メール認証用トークンテーブル
+CREATE TABLE IF NOT EXISTS verification_tokens (
+    id           INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id      INT          NOT NULL UNIQUE,
+    token        VARCHAR(255) NOT NULL,
+    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+
  
