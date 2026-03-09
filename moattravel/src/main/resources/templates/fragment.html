@@ -76,6 +76,8 @@
 							<!-- ドロップダウンメニューの内容。右端を揃える設定 -->
 							<div class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdownGeneral">
 								<!-- ログアウトボタン。クリック時に下の隠しフォームを送信するようJavaScriptが設定 -->
+								<a class="dropdown-item moattravel-dropdown-item" th:href="@{/user}">会員情報</a>
+								<div class="dropdown-divider"></div>
 								<a class="dropdown-item moattravel-dropdown-item" th:href="@{/logout}"
 									onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
 									ログアウト
