@@ -43,6 +43,7 @@ public class UserService {
 
 		// 登録直後からログイン可能な状態、これでログイン済みになるわけではなく、ログインをしてもいい（１ true）という処理
 		user.setEnabled(true);
+		user.setEnabled(false); // 直前でtrueにしてもここでfalseに上書き（会員登録直後はまだログインさせず、メール認証を待機させる）
 
 		return userRepository.save(user);
 	}
@@ -65,5 +66,12 @@ public class UserService {
      */
     public boolean isSamePassword(String password, String passwordConfirmation) {
         return password.equals(passwordConfirmation);
+    }
+    
+ // ユーザーを有効化する（メール認証成功時などに使用）
+    @Transactional
+    public void enableUser(User user) {
+        user.setEnabled(true); 
+        userRepository.save(user);
     }
 }
