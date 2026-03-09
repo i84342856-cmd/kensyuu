@@ -16,7 +16,10 @@ import com.example.moattravel.repository.UserRepository;
 /**
  * ログイン時にSpring Securityから呼び出され、
  * DBからユーザー情報を検索・取得して「認証用オブジェクト」を作成するクラス
+  「UserDetailsService」インターフェースの中身は驚くほどシンプルです。メソッドがたった一つしかありません。
+ * loadUserByUsername(String username)
  */
+
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
 
@@ -27,9 +30,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         this.userRepository = userRepository;
     }
 
-    /*「UserDetailsService」インターフェースの中身は驚くほどシンプルです。メソッドがたった一つしかありません。
-     * loadUserByUsername(String username)
-     */
+   
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         try {
