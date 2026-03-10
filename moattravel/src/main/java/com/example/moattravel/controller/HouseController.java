@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.example.moattravel.entity.House;
+import com.example.moattravel.form.ReservationInputForm;
 import com.example.moattravel.repository.HouseRepository;
 
 @Controller
@@ -90,7 +91,9 @@ public class HouseController {
         House house = houseRepository.getReferenceById(id);
 
         model.addAttribute("house", house);
-
+     // 予約入力フォームを渡すことで、詳細画面での入力を可能にする
+        model.addAttribute("reservationInputForm", new ReservationInputForm());
+        
         return "houses/show";
     }
 
