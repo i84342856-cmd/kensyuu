@@ -14,7 +14,7 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableMethodSecurity
 public class WebSecurityConfig {
 
-    @Bean // 「メソッドを動かして、出てきた成果物を登録する」
+    @Bean // 「メソッドを動かして、出てきた成果物を登録する」 
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     	
     /* http.authorizeHttpRequests(...) や http.build() といったメソッドは、内部でエラーが発生する可能性があるように設計されています。
