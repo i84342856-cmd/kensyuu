@@ -32,26 +32,51 @@ public class HouseController {
     public String index(@RequestParam(name = "keyword", required = false) String keyword,
                         @RequestParam(name = "area", required = false) String area,
                         @RequestParam(name = "price", required = false) Integer price,
+                        @RequestParam(name = "order", required = false) String order,
                         @PageableDefault(page = 0, size = 10, sort = "id", direction = Direction.ASC) Pageable pageable,
                         Model model) {
         
         Page<House> housePage;
 
-        // 検索条件の優先順位に従ってデータを取得
+     // 1. キーワード検索（民宿名 または 住所）
         if (keyword != null && !keyword.isEmpty()) {
-            housePage = houseRepository.findByNameLikeOrAddressLike("%" + keyword + "%", "%" + keyword + "%", pageable);
+            if (order != null && order.equals("priceAsc")) {
+                housePage = houseRepository.findByNameLikeOrAddressLikeOrderByPriceAsc("%" + keyword + "%", "%" + keyword + "%", pageable);
+            } else {
+                housePage = houseRepository.findByNameLikeOrAddressLikeOrderByCreatedAtDesc("%" + keyword + "%", "%" + keyword + "%", pageable);
+            }
+
+        // 2. エリア検索
         } else if (area != null && !area.isEmpty()) {
-            housePage = houseRepository.findByAddressLike("%" + area + "%", pageable);
+            if (order != null && order.equals("priceAsc")) {
+                housePage = houseRepository.findByAddressLikeOrderByPriceAsc("%" + area + "%", pageable);
+            } else {
+                housePage = houseRepository.findByAddressLikeOrderByCreatedAtDesc("%" + area + "%", pageable);
+            }
+
+        // 3. 予算検索
         } else if (price != null) {
-            housePage = houseRepository.findByPriceLessThanEqual(price, pageable);
+            if (order != null && order.equals("priceAsc")) {
+                housePage = houseRepository.findByPriceLessThanEqualOrderByPriceAsc(price, pageable);
+            } else {
+                housePage = houseRepository.findByPriceLessThanEqualOrderByCreatedAtDesc(price, pageable);
+            }
+
+        // 4. 全件取得（検索条件なし）
         } else {
-            housePage = houseRepository.findAll(pageable);
+            if (order != null && order.equals("priceAsc")) {
+                housePage = houseRepository.findAllByOrderByPriceAsc(pageable);
+            } else {
+                housePage = houseRepository.findAllByOrderByCreatedAtDesc(pageable);
+            }
         }
 
+        // ビューへ渡す属性の設定
         model.addAttribute("housePage", housePage);
         model.addAttribute("keyword", keyword);
         model.addAttribute("area", area);
         model.addAttribute("price", price);
+        model.addAttribute("order", order);
 
         return "houses/index";
     }
