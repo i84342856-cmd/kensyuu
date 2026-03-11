@@ -2,6 +2,7 @@ package com.example.moattravel.service;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,6 +65,37 @@ public class ReservationService {
         reservation.setNumberOfPeople(reservationRegisterForm.getNumberOfPeople());
         reservation.setAmount(reservationRegisterForm.getAmount());
 
+        reservationRepository.save(reservation);
+    }
+    
+    /**
+     * Stripeのセッション完了後に、Map形式のメタデータを受け取って予約を登録する
+     */
+    @Transactional
+    public void create(Map<String, String> paymentIntentObject) {
+        Reservation reservation = new Reservation();
+
+        // Mapから値を取り出して型変換を行う
+        Integer houseId = Integer.valueOf(paymentIntentObject.get("houseId"));
+        Integer userId = Integer.valueOf(paymentIntentObject.get("userId"));
+        Integer numberOfPeople = Integer.valueOf(paymentIntentObject.get("numberOfPeople"));
+        Integer amount = Integer.valueOf(paymentIntentObject.get("amount"));
+        LocalDate checkinDate = LocalDate.parse(paymentIntentObject.get("checkinDate"));
+        LocalDate checkoutDate = LocalDate.parse(paymentIntentObject.get("checkoutDate"));
+
+        // IDをもとにエンティティを取得
+        House house = houseRepository.getReferenceById(houseId);
+        User user = userRepository.getReferenceById(userId);
+
+        // 予約エンティティにセット
+        reservation.setHouse(house);
+        reservation.setUser(user);
+        reservation.setCheckinDate(checkinDate);
+        reservation.setCheckoutDate(checkoutDate);
+        reservation.setNumberOfPeople(numberOfPeople);
+        reservation.setAmount(amount);
+
+        // 保存
         reservationRepository.save(reservation);
     }
 }

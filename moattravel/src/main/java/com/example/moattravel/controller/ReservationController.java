@@ -2,6 +2,8 @@ package com.example.moattravel.controller;
 
 import java.time.LocalDate;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort.Direction;
@@ -27,18 +29,23 @@ import com.example.moattravel.repository.HouseRepository;
 import com.example.moattravel.repository.ReservationRepository;
 import com.example.moattravel.security.UserDetailsImpl;
 import com.example.moattravel.service.ReservationService;
+import com.example.moattravel.service.StripeService;
+
 
 @Controller
 public class ReservationController {
     private final ReservationRepository reservationRepository;
     private final HouseRepository houseRepository;
     private final ReservationService reservationService;
+    private final StripeService stripeService; 
 
-    public ReservationController(ReservationRepository reservationRepository, HouseRepository houseRepository, ReservationService reservationService) {
-        this.reservationRepository = reservationRepository;
+
+    public ReservationController(ReservationRepository reservationRepository, HouseRepository houseRepository, ReservationService reservationService, StripeService stripeService) { 
+        this.reservationRepository = reservationRepository; 
         this.houseRepository = houseRepository;
         this.reservationService = reservationService;
-    }
+        this.stripeService = stripeService;
+    }    
 
     /**
      * ログイン済みユーザーの予約一覧ページを表示します。
@@ -103,6 +110,7 @@ public class ReservationController {
     public String confirm(@PathVariable(name = "id") Integer id,
                           @ModelAttribute ReservationInputForm reservationInputForm,
                           @AuthenticationPrincipal UserDetailsImpl userDetailsImpl,
+                          HttpServletRequest httpServletRequest,
                           Model model) 
     {
         House house = houseRepository.getReferenceById(id);
@@ -125,9 +133,12 @@ public class ReservationController {
             reservationInputForm.getNumberOfPeople(), 
             amount
         );
+        
+        String sessionId = stripeService.createStripeSession(house.getName(), reservationRegisterForm, httpServletRequest);
 
         model.addAttribute("house", house);
         model.addAttribute("reservationRegisterForm", reservationRegisterForm);
+        model.addAttribute("sessionId", sessionId);
 
         return "reservations/confirm";
     }

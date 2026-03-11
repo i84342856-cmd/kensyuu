@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+    <head>
+        <meta charset="UTF-8">
+        <title>form</title>
+        <script type="text/javascript"></script>
+        <style type="text/css">
+            .errorStr {color:red;}
+        </style>
+    </head>
+        <body>
+            <form th:action="@{/form}" th:object="${person}" method="post" novalidate>
+                <label for="name">名前：</label>
+                <input type="text" th:field="*{name}">
+                <span class="errorStr" th:errors="*{name}"></span>
+                <br>
+
+                <label for="age">年齢：</label>
+                <input type="number" th:field="*{age}">
+                <span class="errorStr" th:errors="*{age}"></span>
+                <br>
+
+                <label for="business">職業：</label>
+                <input type="text" th:field="*{business}">
+                <span class="errorStr" th:errors="*{business}"></span>
+                <br>
+
+                <label for="email">Eメール：</label>
+                <input type="text" th:field="*{email}">
+                <span class="errorStr" th:errors="*{email}"></span>
+                <br>
+
+                <button>送信</button>
+            </form>
+        </body>
+</html>
