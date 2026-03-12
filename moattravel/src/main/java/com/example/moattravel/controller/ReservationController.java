@@ -17,7 +17,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.example.moattravel.entity.House;
@@ -30,7 +29,6 @@ import com.example.moattravel.repository.ReservationRepository;
 import com.example.moattravel.security.UserDetailsImpl;
 import com.example.moattravel.service.ReservationService;
 import com.example.moattravel.service.StripeService;
-
 
 @Controller
 public class ReservationController {
@@ -143,15 +141,13 @@ public class ReservationController {
         return "reservations/confirm";
     }
     
-    /**
-     * 資料にないので、AI作成、予約を確定し、データベースに保存する
-     */
+    /*
     @PostMapping("/houses/{id}/reservations/create")
-    public String create(@ModelAttribute ReservationRegisterForm reservationRegisterForm) {
-        reservationService.create(reservationRegisterForm);
+    public String create(@ModelAttribute ReservationRegisterForm reservationRegisterForm) {                
+        reservationService.create(reservationRegisterForm);        
         
-        // 予約完了後は、予約一覧ページにリダイレクトする
         return "redirect:/reservations?reserved";
     }
+    */
     
 }
