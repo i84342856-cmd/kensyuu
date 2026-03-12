@@ -1,16 +1,15 @@
 <!DOCTYPE html>
 <html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
     <head>
-        <div th:replace="~{fragment :: meta}"></div>   
+        <div th:replace="__________"></div>   
              
-        <div th:replace="~{fragment :: styles}"></div>
+        <div th:replace="__________"></div>
         
         <title>民宿詳細</title>       
     </head>
     <body>
         <div class="samuraitravel-wrapper">
-            <!-- ヘッダー -->
-            <div th:replace="~{fragment :: header}"></div>
+            <div th:replace="__________"></div>
             
             <main>
                 <div class="container pt-4 pb-5 samuraitravel-container">
@@ -18,22 +17,22 @@
                         <div class="col-xl-5 col-lg-6 col-md-8">
                             <nav class="mb-4" style="--bs-breadcrumb-divider: '>';" aria-label="breadcrumb">
                                 <ol class="breadcrumb mb-0">                        
-                                    <li class="breadcrumb-item"><a th:href="@{/admin/houses}">民宿一覧</a></li>
+                                    <li class="breadcrumb-item"><a __________="__________">民宿一覧</a></li>
                                     <li class="breadcrumb-item active" aria-current="page">民宿詳細</li>
                                 </ol>
                             </nav> 
                             
-                            <h1 class="mb-4 text-center" th:text="${house.getName()}"></h1>
+                            <h1 class="mb-4 text-center" __________="__________"></h1>
                             
                             <div class="d-flex justify-content-end align-items-end mb-3">                    
                                 <div>                                    
-                                    <a th:href="@{/admin/houses/__${house.getId()}__/edit}">編集</a>                                   
+                                    <__________ __________="__________">編集</__________>                                   
                                 </div>
                             </div>                                                                             
                             
                             <div class="mb-3">
-                                <img th:if="${house.getImageName()}" th:src="@{/storage/__${house.getImageName()}__}" class="w-100" alt="民宿画像">
-                                <img th:unless="${house.getImageName()}" th:src="@{/images/noImage.png}" class="w-100" alt="NO IMAGE">
+                                <__________ th:if="__________" th:src="__________" class="w-100" alt="民宿画像">
+                                <__________ th:unless="__________" th:src="__________" class="w-100" alt="NO IMAGE">
                             </div>   
                             
                             <div class="container mb-4">
@@ -43,7 +42,7 @@
                                     </div>                                                  
             
                                     <div class="col">
-                                        <span th:text="${house.getId()}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div>
             
@@ -53,7 +52,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span th:text="${house.getName()}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div>                    
             
@@ -63,7 +62,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span class="samuraitravel-pre-wrap" th:text="${house.getDescription()}"></span>
+                                        <span class="samuraitravel-pre-wrap" __________="__________"></span>
                                     </div>
                                 </div>
             
@@ -73,7 +72,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span th:text="${#numbers.formatInteger(house.getPrice(), 1, 'COMMA') + '円'}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div> 
                                 
@@ -83,7 +82,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span th:text="${house.getCapacity() + '人'}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div>                                
                                 
@@ -93,7 +92,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span th:text="${house.getPostalCode()}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div>   
                                 
@@ -103,7 +102,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span th:text="${house.getAddress()}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div>   
                                 
@@ -113,7 +112,7 @@
                                     </div>
             
                                     <div class="col">
-                                        <span th:text="${house.getPhoneNumber()}"></span>
+                                        <span __________="__________"></span>
                                     </div>
                                 </div>                                
                             </div>                                                  
@@ -123,10 +122,9 @@
                 </div>             
             </main>
             
-            <!-- フッター -->
-            <div th:replace="~{fragment :: footer}"></div>
+            <div th:replace="__________"></div>
         </div>    
         
-        <div th:replace="~{fragment :: scripts}"></div>       
+        <div th:replace="__________"></div>       
     </body>
 </html>

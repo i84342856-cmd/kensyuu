@@ -1,16 +1,15 @@
 <!DOCTYPE html>
 <html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
     <head>
-        <div th:replace="~{fragment :: meta}"></div>   
+        <div th:replace="__________"></div>   
              
-        <div th:replace="~{fragment :: styles}"></div> 
+        <div th:replace="__________"></div> 
         
         <title>ログイン</title>       
     </head>
     <body>
         <div class="samuraitravel-wrapper">
-            <!-- ヘッダー -->
-            <div th:replace="~{fragment :: header}"></div>
+            <div th:replace="__________"></div>
             
             <main>
                 <div class="container pt-4 pb-5 samuraitravel-container">
@@ -26,25 +25,25 @@
                                 </p>
                             </div>
 
-                            <div th:if="${param.error}" class="alert alert-danger">
+                            <div th:if="__________" class="alert alert-danger">
                                 メールアドレスまたはパスワードが正しくありません。
                             </div>
                             
-                            <form th:action="@{/login}" method="post">
+                            <form th:action="__________" method="__________">
                                 <div class="form-group mb-3">
-                                    <input type="text" class="form-control" name="username" autocomplete="email" placeholder="メールアドレス" autofocus>
+                                    <input type="__________" class="form-control" name="__________" autocomplete="email" placeholder="メールアドレス" autofocus>
                                 </div>
                                 <div class="form-group mb-3">
-                                    <input type="password" class="form-control" name="password" autocomplete="new-password" placeholder="パスワード">
+                                    <input type="__________" class="form-control" name="__________" autocomplete="new-password" placeholder="パスワード">
                                 </div>
                                 
                                 <div class="form-group d-flex justify-content-center my-4">
-                                    <button type="submit" class="btn text-white shadow-sm w-100 samuraitravel-btn">ログイン</button>
+                                    <button type="__________" class="btn text-white shadow-sm w-100 samuraitravel-btn">ログイン</button>
                                 </div>
                             </form>
                             
                             <div class="text-center">                                
-                                <a th:href="@{/signup}">
+                                <a th:href="__________">
                                     会員登録
                                 </a>
                             </div>                                                 
@@ -53,10 +52,9 @@
                 </div>             
             </main>
             
-            <!-- フッター -->
-            <div th:replace="~{fragment :: footer}"></div>
+            <div th:replace="__________"></div>
         </div>    
         
-        <div th:replace="~{fragment :: scripts}"></div>         
+        <div th:replace="__________"></div>         
     </body>
 </html>
