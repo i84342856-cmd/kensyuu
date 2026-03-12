@@ -34,15 +34,21 @@ public class StripeWebhookController {
         Event event = null;
 
         try {
+        	// ★超厳格なセキュリティチェック（本人確認）
+            // 届いた「データ本体（payload）」と「署名（sigHeader）」と「秘密のパスワード（webhookSecret）」の3つを照らし合わせて、
+            // 『本当にStripeから送られてきた本物の通知か？』を確認し、安全な Event（通知データ）に変換します。
             event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
         } catch (SignatureVerificationException e) {
+        	// もし署名が一致しなかった場合「400 BAD REQUEST（不正なリクエストです）」
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
         }
-
+        
+       // Stripeからは色々な種類の通知が届くので、「決済完了（checkout.session.completed）」の通知かどうかを確認します。
         if ("checkout.session.completed".equals(event.getType())) {
             stripeService.processSessionCompleted(event);
         }
-
+        
+        // Stripeのサーバーに対して、「200 OK（無事に通知を受け取りました！）」というお返事を返します。
         return new ResponseEntity<>("Success", HttpStatus.OK);
     }
 }
