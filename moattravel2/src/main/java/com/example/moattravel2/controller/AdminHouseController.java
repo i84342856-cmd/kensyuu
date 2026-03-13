@@ -44,5 +44,7 @@ public class AdminHouseController {
 			model.addAttribute("house",house);
 			return "admin/houses/show";
 	}
+	
+	
 
 }
