@@ -18,15 +18,20 @@ import com.example.moattravel2.repository.HouseRepository;
 @Controller
 @RequestMapping("/houses")
 public class HouseController {
+
 	private final HouseRepository houseRepository;
 
+	// コンストラクタ注入
 	public HouseController(HouseRepository houseRepository) {
 		this.houseRepository = houseRepository;
 	}
 
+	/**
+	 * 民宿一覧ページ
+	 * キーワード、エリア、料金による検索結果をページネーションして表示する
+	 */
 	@GetMapping
-	public String index(
-			@RequestParam(name = "keyword", required = false) String keyword,
+	public String index(@RequestParam(name = "keyword", required = false) String keyword,
 			@RequestParam(name = "area", required = false) String area,
 			@RequestParam(name = "price", required = false) Integer price,
 			@RequestParam(name = "order", required = false) String order,
@@ -35,8 +40,9 @@ public class HouseController {
 
 		Page<House> housePage;
 
+		// 1. キーワード検索（民宿名 または 住所）
 		if (keyword != null && !keyword.isEmpty()) {
-			if (keyword != null && !keyword.isEmpty()) {
+			if (order != null && order.equals("priceAsc")) {
 				housePage = houseRepository.findByNameLikeOrAddressLikeOrderByPriceAsc("%" + keyword + "%",
 						"%" + keyword + "%", pageable);
 			} else {
@@ -44,6 +50,7 @@ public class HouseController {
 						"%" + keyword + "%", pageable);
 			}
 
+			// 2. エリア検索
 		} else if (area != null && !area.isEmpty()) {
 			if (order != null && order.equals("priceAsc")) {
 				housePage = houseRepository.findByAddressLikeOrderByPriceAsc("%" + area + "%", pageable);
@@ -68,24 +75,27 @@ public class HouseController {
 			}
 		}
 
+		// ビューへ渡す属性の設定
 		model.addAttribute("housePage", housePage);
 		model.addAttribute("keyword", keyword);
-		model.addAttribute("keyword", area);
-		model.addAttribute("keyword", price);
-		model.addAttribute("keyword", order);
+		model.addAttribute("area", area);
+		model.addAttribute("price", price);
+		model.addAttribute("order", order);
 
 		return "houses/index";
-
 	}
 
+	/**
+	 * 民宿詳細ページ
+	 */
 	@GetMapping("/{id}")
-	public String show(@PathVariable(name = "id") Integer id,
-			ReservationInputForm reservationInputForm,
-			Model model) {
+	public String show(@PathVariable(name = "id") Integer id, Model model) {
 		House house = houseRepository.getReferenceById(id);
+
 		model.addAttribute("house", house);
-		model.addAttribute("reservationInputForm", reservationInputForm);
+		// 予約入力フォームを渡すことで、詳細画面での入力を可能にする
+		model.addAttribute("reservationInputForm", new ReservationInputForm());
+
 		return "houses/show";
 	}
-
 }
