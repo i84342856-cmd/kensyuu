@@ -1,133 +1,178 @@
+@charset "UTF-8";
+
+/* ====================================
+   基本設定 (Base)
+   ==================================== */
 html {
-  font-size: 14px;
+	font-size: 14px;
 }
 
 body {
-  font-family: 'Noto Sans JP', sans-serif;  
+	font-family: 'Noto Sans JP', sans-serif;
 }
 
 h1 {
-  font-size: 1.5rem;
+	font-size: 1.5rem;
 }
 
 h2 {
-  font-size: 1.475rem;
+ font-size: 1.475rem;
 }
 
 h3 {
-  font-size: 1.25rem;
+	font-size: 1.25rem;
 }
 
+
 a {
-  color: #5196a6;
-  text-decoration: none !important;
+	color: #5196a6;
+	text-decoration: none !important;
 }
 
 a:hover {
-    color: #407784;
+	color: #407784;
+}
+
+/* ====================================
+   レイアウト (Layout)
+   ==================================== */
+
+/* ページ全体を包む要素。最小の高さを画面の高さ100% */
+.moattravel-wrapper {
+	min-height: 100vh;
+	/* フッターを最下部に固定するために相対位置を指定 */
+	position: relative;
+	/* フッターの高さ分（60px）の余白を下部に確保 */
+	padding-bottom: 60px;
+	/* パディングを要素の幅・高さに含める設定 */
+	box-sizing: border-box;
+}
+
+/* ナビゲーションバーの最小の高さを60pxに設定 */
+.moattravel-navbar {
+	min-height: 60px;
+}
+
+/* ロゴ画像の高さを30pxに制限 */
+.moattravel-logo {
+	height: 30px;
 }
 
 footer {
-  width: 100%;
-  height: 60px;
-  position: absolute;
-  bottom: 0;    
-  background-color: #f2f0eb;
+	width: 100%;
+	height: 60px;
+	position: absolute;
+	bottom: 0;
+	background-color: #f2f0eb;
 }
 
-.samuraitravel-wrapper {
-  min-height: 100vh;
-  position: relative;
-  padding-bottom: 60px;
-  box-sizing: border-box;
+/* ====================================
+   ボタン (Buttons)
+   ==================================== */
+
+/* サイト独自のメインボタン色を青緑色に設定 */
+.moattravel-btn {
+	background-color: #5196a6 !important;
+	transition: 0.1s;
 }
 
-.samuraitravel-navbar {
-  min-height: 60px;
+.moattravel-btn:hover {
+	opacity: 0.8;
 }
 
-.samuraitravel-logo {
-  height: 30px;  
+/* ====================================
+   ページネーション (Pagination)
+   ==================================== */
+
+/* ページ番号リンクの色をサイトカラーに合わせている */
+.moattravel-page-link {
+	color: #5196a6;
 }
 
-.samuraitravel-btn {
-  background-color: #5196a6 !important;   
-  transition: 0.1s;
+.moattravel-page-link:hover {
+	color: #407784;
 }
 
-.samuraitravel-btn:hover {
-  opacity: 0.8;   
+/* 現在表示中のページ番号の背景色と枠線をサイトカラーに変更 */
+.moattravel-active {
+	background-color: #5196a6 !important;
+	border-color: #5196a6 !important;
 }
 
-.samuraitravel-page-link {
-  color: #5196a6;
+/* 改行文字をそのまま反映し、枠をはみ出す場合は自動で折り返す設定 */
+.moattravel-pre-wrap {
+	/* 改行文字で行を折り返す */
+	white-space: pre-wrap;
 }
 
-.samuraitravel-page-link:hover {
-  color: #407784;
+/* 削除や警告用のリンクの色を赤色に設定 */
+.moattravel-link-danger {
+	color: #f2594b;
 }
 
-.samuraitravel-active {
-  background-color: #5196a6 !important;
-  border-color: #5196a6 !important;
+.moattravel-link-danger:hover {
+	color: #a63c3c;
 }
 
-.samuraitravel-pre-wrap {
-  /* 改行文字で行を折り返す */
-  white-space: pre-wrap;
+/* 削除ボタンなどの危険系ボタンを赤色に設定 */
+.moattravel-btn-danger {
+	background-color: #f2594b !important;
+	transition: 0.1s;
 }
 
-.samuraitravel-link-danger {
-    color: #f2594b;
+.moattravel-btn-danger:hover {
+	opacity: 0.8;
 }
 
-.samuraitravel-link-danger:hover {
-    color: #a63c3c;
+/* ドロップダウンメニューの項目を選択（アクティブ）した際の色である */
+.moattravel-dropdown-item:active {
+	background-color: #5196a6;
 }
 
-.samuraitravel-btn-danger {
-    background-color: #f2594b !important;
-    transition: 0.1s;
+.moattravel-card-link {
+	transition: 0.3s;
 }
 
-.samuraitravel-btn-danger:hover {
-  opacity: 0.8;   
+.moattravel-card-link:hover {
+	opacity: 0.7;
 }
 
-.samuraitravel-dropdown-item:active {
-  background-color: #5196a6;
+.moattravel-horizontal-card-image {
+	width: 100%;
+	height: 240px;
+	object-fit: cover;
 }
 
-.samuraitravel-card-link {
-  transition: 0.3s;
+.moattravel-sort-box {
+	 width: 150px;
 }
 
-.samuraitravel-card-link:hover {
-  opacity: 0.7;
+ .moattravel-vertical-card-image {
+width: 100%;
+height: 150px;
+object-fit: cover;
 }
 
-.samuraitravel-horizontal-card-image {
-  width: 100%;
-  height: 240px;
-  object-fit: cover;
+.moattravel-search-form {
+max-width: 300px;
 }
 
-.samuraitravel-sort-box {
-  width: 150px;
-}
 
-.samuraitravel-vertical-card-image {
-  width: 100%;
-  height: 150px;
-  object-fit: cover;
-}
 
-.samuraitravel-search-form {
-    max-width: 300px;
-}
-
+/* Layout - Responsive */
 @media screen and (min-width: 1400px) {
-  .samuraitravel-container {
-    max-width: 1200px;
-  }
+	.moattravel-container {
+		max-width: 1200px;
+	}
+}
+
+/* ====================================
+   レスポンシブ設定 (Responsive)
+   ==================================== */
+
+/* 画面幅が1400px以上の大きなモニター向けの調整である */
+@media screen and (min-width: 1400px) {
+	.moattravel-container {
+		max-width: 1200px;
+	}
 }
