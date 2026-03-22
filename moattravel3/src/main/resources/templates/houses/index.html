@@ -23,17 +23,18 @@
 
 					<div class="col-xl-3 col-lg-4 col-md-12">
 						<form method="get" th:action="@{/houses}" class="w-100 mb-3">
-							<div class="input-group">
+
+							<input th:if="${order}" type="hidden" name="order" th:value="${order}">
+
+							<div class="input-group mb-3">
 								<input type="text" class="form-control" name="keyword" th:value="${keyword}"
 									placeholder="民宿名・目的地">
 								<button type="submit" class="btn text-white shadow-sm moattravel-btn">検索</button>
 							</div>
-						</form>
 
-						<div class="card mb-3">
-							<div class="card-header">エリアから探す</div>
-							<div class="card-body">
-								<form method="get" th:action="@{/houses}" class="w-100">
+							<div class="card mb-3">
+								<div class="card-header">エリアから探す</div>
+								<div class="card-body">
 									<div class="form-group mb-3">
 										<select class="form-control form-select" name="area">
 											<option value="" hidden>選択してください</option>
@@ -114,14 +115,12 @@
 										<button type="submit"
 											class="btn text-white shadow-sm w-100 moattravel-btn">検索</button>
 									</div>
-								</form>
+								</div>
 							</div>
-						</div>
 
-						<div class="card mb-3">
-							<div class="card-header">1泊あたりの予算から探す</div>
-							<div class="card-body">
-								<form method="get" th:action="@{/houses}" class="w-100">
+							<div class="card mb-3">
+								<div class="card-header">1泊あたりの予算から探す</div>
+								<div class="card-body">
 									<div class="form-group mb-3">
 										<select class="form-control form-select" name="price">
 											<option value="" hidden>選択してください</option>
@@ -136,9 +135,9 @@
 										<button type="submit"
 											class="btn text-white shadow-sm w-100 moattravel-btn">検索</button>
 									</div>
-								</form>
+								</div>
 							</div>
-						</div>
+						</form>
 					</div>
 
 					<div class="col">
@@ -148,23 +147,19 @@
 							</p>
 							<p th:unless="${housePage.getTotalPages() > 1}" class="fs-5 mb-3"
 								th:text="${'検索結果：' + housePage.getTotalElements() + '件'}"></p>
-							
-								<!-- 並べ替え用フォーム -->
+
 							<form method="get" th:action="@{/houses}" class="mb-3 moattravel-sort-box">
-								<!-- 
-								並べ替えを行っても現在の検索条件（キーワード、エリア、予算）が消えないように、
-								隠しフィールド（hidden）として値を保持し、一緒に送信する。
-																-->
 								<input th:if="${keyword}" type="hidden" name="keyword" th:value="${keyword}">
 								<input th:if="${area}" type="hidden" name="area" th:value="${area}">
 								<input th:if="${price}" type="hidden" name="price" th:value="${price}">
-								<!-- 
-								セレクトボックスの選択肢（orderパラメータ）が変更されると、
-								JavaScriptのonChangeイベントにより、即座にこのフォームが送信される。
-								-->
+
 								<select class="form-select form-select-sm" name="order" onChange="this.form.submit();">
-									<option value="createdAtDesc" th:selected="${order == 'createdAtDesc' || order == null}">新着順</option>
+									<option value="createdAtDesc"
+										th:selected="${order == 'createdAtDesc' || order == null}">新着順</option>
 									<option value="priceAsc" th:selected="${order == 'priceAsc'}">宿泊料金が安い順</option>
+									<!-- 更新条件を追加 -->
+									<option value="popular" th:selected="${order == 'popular'}">人気順</option>
+									<option value="updatedAtDesc" th:selected="${order == 'updatedAtDesc'}">更新順</option>
 								</select>
 							</form>
 						</div>
@@ -208,9 +203,7 @@
 								<ul class="pagination">
 									<li class="page-item">
 										<span th:if="${housePage.isFirst()}" class="page-link disabled">前</span>
-										<!-- 「前」ボタンのリンク：現在の検索条件に加え、
-										選択中の並べ替え順（order）もパラメータとして渡す。-->
-											<a th:unless="${housePage.isFirst()}"
+										<a th:unless="${housePage.isFirst()}"
 											th:href="@{/houses(page = ${housePage.getNumber() - 1}, keyword = ${keyword}, area = ${area}, price = ${price}, order = ${order})}"
 											class="page-link moattravel-page-link">前</a>
 									</li>

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS houses (
  postal_code VARCHAR(50) NOT NULL,
  address VARCHAR(255) NOT NULL,
  phone_number VARCHAR(50) NOT NULL,
+ -- ▼ ここに予約数を保存するカラムを追加（デフォルト値は0にしておく）
+ reservation_count INT NOT NULL DEFAULT 0,
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
  );

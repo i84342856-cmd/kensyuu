@@ -97,5 +97,9 @@ public class ReservationService {
 
         // 保存
         reservationRepository.save(reservation);
+        
+     // ▼ここから追記：予約数を+1して更新する
+        house.setReservationCount(house.getReservationCount() + 1);
+        houseRepository.save(house);
     }
 }

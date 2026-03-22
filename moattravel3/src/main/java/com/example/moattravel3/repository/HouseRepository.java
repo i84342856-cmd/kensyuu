@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.example.moattravel3.entity.House;
 
@@ -45,9 +47,23 @@ public interface HouseRepository extends JpaRepository<House, Integer> {
 	Page<House> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
 	Page<House> findAllByOrderByPriceAsc(Pageable pageable);
-	
+
 	/**
-     * トップページ用：新しく登録された民宿を最大10件取得する
-     */
-    List<House> findTop10ByOrderByCreatedAtDesc();
+	 * トップページ用：新しく登録された民宿を最大10件取得する
+	 */
+	List<House> findTop10ByOrderByCreatedAtDesc();
+
+	/* =======================================================
+	 * 【新規追加】複合条件検索（キーワード AND エリア AND 予算）
+	 * ======================================================= */
+	@Query("SELECT h FROM House h WHERE " +
+			"(:keyword IS NULL OR :keyword = '' OR h.name LIKE CONCAT('%', :keyword, '%') OR h.address LIKE CONCAT('%', :keyword, '%')) "
+			+
+			"AND (:area IS NULL OR :area = '' OR h.address LIKE CONCAT('%', :area, '%')) " +
+			"AND (:price IS NULL OR h.price <= :price)")
+	Page<House> findBySearchConditions(
+			@Param("keyword") String keyword,
+			@Param("area") String area,
+			@Param("price") Integer price,
+			Pageable pageable);
 }
