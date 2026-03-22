@@ -25,9 +25,10 @@
                             <h1 class="mb-3 text-center">会員情報</h1> 
                              
                             <div class="d-flex justify-content-end align-items-end mb-3">                    
-                                <div>
-                                    <a th:href="@{/user/edit}">編集</a>                        
-                                </div>
+								<div>
+								        <a th:href="@{/user/edit}" class="me-2">編集</a>
+								        <a th:href="@{/user/delete}">退会</a>                        
+								    </div>
                             </div>                                        
                              
                             <div th:if="${successMessage}" class="alert alert-info">

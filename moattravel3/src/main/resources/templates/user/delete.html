@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+<head>
+    <div th:replace="~{fragment :: meta}"></div>
+    <div th:replace="~{fragment :: styles}"></div>
+    <title>退会確認</title>
+</head>
+
+<body>
+    <div class="moattravel-wrapper">
+        <div th:replace="~{fragment :: header}"></div>
+
+        <main>
+            <div class="container pt-4 pb-5 moattravel-container">
+                <div class="row justify-content-center">
+                    <div class="col-xl-5 col-lg-6 col-md-8">
+                        <nav class="mb-4" style="--bs-breadcrumb-divider: '>';" aria-label="breadcrumb">
+                            <ol class="breadcrumb mb-0">
+                                <li class="breadcrumb-item"><a th:href="@{/}">ホーム</a></li>
+                                <li class="breadcrumb-item"><a th:href="@{/user}">会員情報</a></li>
+                                <li class="breadcrumb-item active" aria-current="page">退会確認</li>
+                            </ol>
+                        </nav>
+
+                        <h1 class="mb-4 text-center">退会確認</h1>
+                        
+                        <div class="alert alert-danger" role="alert">
+                            <h4 class="alert-heading">本当に退会しますか？</h4>
+                            <p class="mb-0">退会すると、これまでの予約履歴や会員情報がすべて削除されます。この操作は取り消せません。</p>
+                        </div>
+
+                        <div th:object="${userDeleteForm}">
+                            <div class="form-group row mb-3">
+                                <div class="col-md-4">
+                                    <span class="fw-bold">氏名</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span th:text="*{name}"></span>
+                                </div>
+                            </div>
+
+                            <div class="form-group row mb-3">
+                                <div class="col-md-4">
+                                    <span class="fw-bold">フリガナ</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span th:text="*{furigana}"></span>
+                                </div>
+                            </div>
+
+                            <div class="form-group row mb-3">
+                                <div class="col-md-4">
+                                    <span class="fw-bold">メールアドレス</span>
+                                </div>
+                                <div class="col-md-8">
+                                    <span th:text="*{email}"></span>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <form method="post" th:action="@{/user/delete}">
+                                <div class="form-group d-flex justify-content-center flex-column align-items-center my-4">
+                                    <button type="submit" class="btn btn-danger text-white shadow-sm w-50 mb-3">退会を実行する</button>
+                                    <a th:href="@{/user}" class="text-muted">キャンセルして会員情報に戻る</a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div th:replace="~{fragment :: footer}"></div>
+    </div>
+
+    <div th:replace="~{fragment :: scripts}"></div>
+</body>
+
+</html>

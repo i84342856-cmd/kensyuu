@@ -1,4 +1,8 @@
+
 package com.example.moattravel3.controller;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
 
 // Spring Securityからログインユーザー情報を受け取るための重要アノテーション
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.example.moattravel3.entity.User;
+import com.example.moattravel3.form.UserDeleteForm;
 import com.example.moattravel3.form.UserEditForm;
 import com.example.moattravel3.repository.UserRepository;
 import com.example.moattravel3.security.UserDetailsImpl;
@@ -84,4 +89,34 @@ public class UserController {
 
 		return "redirect:/user";
 	}
+
+	@GetMapping("/delete")
+	public String delete(@AuthenticationPrincipal UserDetailsImpl userDetailsImpl, Model model) {
+		User user = userRepository.getReferenceById(userDetailsImpl.getUser().getId());
+		UserDeleteForm userDeleteForm = new UserDeleteForm(
+				user.getId(),
+				user.getName(),
+				user.getFurigana(),
+				user.getPostalCode(),
+				user.getAddress(),
+				user.getPhoneNumber(),
+				user.getEmail());
+
+		model.addAttribute("userDeleteForm", userDeleteForm);
+		return "user/delete";
+	}
+
+	@PostMapping("/delete")
+	public String delete(@AuthenticationPrincipal UserDetailsImpl userDetailsImpl,
+			HttpServletRequest request,
+			RedirectAttributes redirectAttributes) throws ServletException {
+		User user = userRepository.getReferenceById(userDetailsImpl.getUser().getId());
+		userRepository.deleteById(user.getId());
+		
+		request.logout();
+		
+		redirectAttributes.addFlashAttribute("successMessage", "アカウントを削除しました");
+		return "redirect:/";
+	}
+
 }
