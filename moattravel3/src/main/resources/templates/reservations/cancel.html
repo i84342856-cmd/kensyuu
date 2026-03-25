@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html xmlns:th="https://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+<head>
+	<div th:replace="~{fragment :: meta}"></div>
+	<div th:replace="~{fragment :: styles}"></div>
+	<title>予約キャンセル確認</title>
+</head>
+
+<body>
+	<div class="moattravel-wrapper">
+		<div th:replace="~{fragment :: header}"></div>
+
+		<main>
+			<div class="container pt-4 pb-5 moattravel-container">
+				<div class="row justify-content-center">
+					<div class="col-xl-5 col-lg-6 col-md-8">
+						<nav class="mb-4" style="--bs-breadcrumb-divider: '>';" aria-label="breadcrumb">
+							<ol class="breadcrumb mb-0">
+								<li class="breadcrumb-item"><a th:href="@{/}">ホーム</a></li>
+								<li class="breadcrumb-item"><a th:href="@{/reservations}">予約一覧</a></li>
+								<li class="breadcrumb-item active" aria-current="page">予約キャンセル確認</li>
+							</ol>
+						</nav>
+
+						<h1 class="mb-4 text-center">予約キャンセル確認</h1>
+
+						<div class="alert alert-danger" role="alert">
+							<h4 class="alert-heading">本当にキャンセルしますか？</h4>
+							<p>以下の予約をキャンセルします。キャンセルポリシーに基づき、キャンセル料が発生する場合がありますのでご注意ください。</p>
+							<hr>
+							<p class="mb-0"><strong>※日時の変更をご希望の場合は、現在の予約を一度キャンセルの上、再度新規にご予約をお願いいたします。</strong></p>
+						</div>
+
+						<div class="container mb-4 mt-4">
+							<div class="row pb-2 mb-2 border-bottom">
+								<div class="col-5">
+									<span class="fw-bold">民宿名</span>
+								</div>
+								<div class="col">
+									<span th:text="${reservation.getHouse().getName()}"></span>
+								</div>
+							</div>
+
+							<div class="row pb-2 mb-2 border-bottom">
+								<div class="col-5">
+									<span class="fw-bold">チェックイン日</span>
+								</div>
+								<div class="col">
+									<span th:text="${reservation.getCheckinDate()}"></span>
+								</div>
+							</div>
+
+							<div class="row pb-2 mb-2 border-bottom">
+								<div class="col-5">
+									<span class="fw-bold">チェックアウト日</span>
+								</div>
+								<div class="col">
+									<span th:text="${reservation.getCheckoutDate()}"></span>
+								</div>
+							</div>
+
+							<div class="row pb-2 mb-2 border-bottom">
+								<div class="col-5">
+									<span class="fw-bold">宿泊人数</span>
+								</div>
+								<div class="col">
+									<span th:text="${reservation.getNumberOfPeople() + '名'}"></span>
+								</div>
+							</div>
+
+							<div class="row pb-2 mb-2 border-bottom">
+								<div class="col-5">
+									<span class="fw-bold">宿泊料金</span>
+								</div>
+								<div class="col">
+									<span
+										th:text="${#numbers.formatInteger(reservation.getAmount(), 1, 'COMMA') + '円'}"></span>
+								</div>
+							</div>
+						</div>
+
+						<div class="card mb-4 bg-light">
+							<div class="card-header fw-bold">
+								キャンセルポリシー
+							</div>
+							<div class="card-body text-secondary small">
+								<ul class="mb-0">
+									<li>連絡なしの不泊 / 当日キャンセル：宿泊料金の <strong>100%</strong></li>
+									<li>1日前（前日）キャンセル：宿泊料金の <strong>50%</strong></li>
+									<li>2日〜7日前キャンセル：宿泊料金の <strong>30%</strong></li>
+									<li>8日前までのキャンセル：<strong>無料</strong></li>
+								</ul>
+								<hr>
+								<p class="mb-0">※キャンセル料が発生する場合、ご登録のクレジットカードより引き落としさせていただきます。</p>
+							</div>
+						</div>
+
+						<form method="post" th:action="@{/reservations/__${reservation.getId()}__/cancel}">
+							<div class="form-group d-flex justify-content-center flex-column align-items-center my-4">
+								<button type="submit"
+									class="btn btn-danger text-white shadow-sm w-50 mb-3">キャンセルを実行する</button>
+								<a th:href="@{/reservations}" class="text-muted">一覧に戻る</a>
+							</div>
+						</form>
+
+					</div>
+				</div>
+			</div>
+		</main>
+
+		<div th:replace="~{fragment :: footer}"></div>
+	</div>
+
+	<div th:replace="~{fragment :: scripts}"></div>
+</body>
+
+</html>

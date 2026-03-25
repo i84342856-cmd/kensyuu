@@ -43,7 +43,8 @@
 					</form>
 				</div>
 
-				<h2 class="text-center mb-3">新着</h2>
+
+				<h2 class="text-center moattravel-section-title">新着</h2>
 				<div class="row row-cols-lg-5 row-cols-2 g-3 mb-5">
 					<!-- 
 											新着民宿の表示
@@ -74,9 +75,132 @@
 					</div>
 				</div>
 
+				<h2 class="text-center moattravel-section-title">人気ランキング</h2>
+
+				<div class="row justify-content-center mb-5">
+					<div class="col-lg-8 col-md-10">
+
+						<div class="card mb-3 border-0 shadow-sm moattravel-card-link"
+							th:each="topHouse, stat : ${topHouses}">
+							<a th:href="@{/houses/__${topHouse.getId()}__}" class="link-dark text-decoration-none">
+								<div class="row g-0">
+
+									<div class="col-md-5 position-relative">
+										<span th:if="${stat.count == 1}"
+											class="badge bg-warning text-dark position-absolute m-2 fs-5 shadow"
+											style="top: 0; left: 0; z-index: 10;">🥇 1位</span>
+										<span th:if="${stat.count == 2}"
+											class="badge bg-secondary position-absolute m-2 fs-5 shadow"
+											style="top: 0; left: 0; z-index: 10;">🥈 2位</span>
+										<span th:if="${stat.count == 3}"
+											class="badge bg-danger position-absolute m-2 fs-5 shadow"
+											style="top: 0; left: 0; z-index: 10;">🥉 3位</span>
+										<span th:if="${stat.count >= 4}"
+											class="badge bg-dark position-absolute m-2 fs-6 shadow"
+											style="top: 0; left: 0; z-index: 10;" th:text="${stat.count + '位'}"></span>
+
+										<img th:if="${topHouse.getImageName()}"
+											th:src="@{/storage/__${topHouse.getImageName()}__}"
+											class="img-fluid rounded-start" alt="店舗画像"
+											style="height: 100%; width: 100%; object-fit: cover; min-height: 220px;">
+										<img th:unless="${topHouse.getImageName()}" th:src="@{/images/noImage.png}"
+											class="img-fluid rounded-start" alt="NO IMAGE"
+											style="height: 100%; width: 100%; object-fit: cover; min-height: 220px;">
+									</div>
+
+									<div class="col-md-7 d-flex align-items-center">
+										<div class="card-body p-4">
+											<h3 class="card-title fw-bold mb-3" th:text="${topHouse.getName()}"></h3>
+											<p class="card-text text-muted mb-4">
+												<i class="bi bi-geo-alt-fill"></i> <span
+													th:text="${topHouse.getAddress()}"></span>
+											</p>
+											<p class="card-text text-end">
+												<span class="fs-4 fw-bold text-danger"
+													th:text="${#numbers.formatInteger(topHouse.getPrice(), 1, 'COMMA') + '円'}"></span>
+												<span class="text-muted"> / 泊</span>
+											</p>
+										</div>
+									</div>
+
+								</div>
+							</a>
+						</div>
+
+					</div>
+				</div>
+
+				<h2 class="text-center mt-5 moattravel-section-title">おすすめの特集</h2>
+				<div class="row row-cols-1 row-cols-md-3 g-4 mb-5">
+
+					<div class="col">
+						<a th:href="@{/houses(area='北海道')}" class="text-decoration-none">
+							<div class="card h-100 text-white border-0 shadow-sm overflow-hidden"
+								style="border-radius: 15px;">
+								<img src="https://images.unsplash.com/photo-1542601098-8fc114e148e2?auto=format&fit=crop&q=80&w=800"
+									class="card-img" alt="北海道特集"
+									style="height: 250px; object-fit: cover; filter: brightness(70%); transition: transform 0.3s ease;"
+									onmouseover="this.style.transform='scale(1.05)'"
+									onmouseout="this.style.transform='scale(1)'">
+								<div
+									class="card-img-overlay d-flex flex-column justify-content-center align-items-center text-center p-4">
+									<h3 class="card-title fw-bold mb-3"
+										style="text-shadow: 2px 2px 4px rgba(0,0,0,0.6);">大自然を満喫<br>北海道の宿</h3>
+									<p class="card-text fw-semibold" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.6);">
+										人気の北海道エリア</p>
+									<span class="btn btn-outline-light btn-sm mt-2 rounded-pill px-4">詳細を見る</span>
+								</div>
+							</div>
+						</a>
+					</div>
+
+					<div class="col">
+						<a th:href="@{/houses(price=5000)}" class="text-decoration-none">
+							<div class="card h-100 text-white border-0 shadow-sm overflow-hidden"
+								style="border-radius: 15px;">
+								<img src="https://images.unsplash.com/photo-1553729459-efe14ef6055d?auto=format&fit=crop&q=80&w=800"
+									class="card-img" alt="格安の特集"
+									style="height: 250px; object-fit: cover; filter: brightness(70%); transition: transform 0.3s ease;"
+									onmouseover="this.style.transform='scale(1.05)'"
+									onmouseout="this.style.transform='scale(1)'">
+								<div
+									class="card-img-overlay d-flex flex-column justify-content-center align-items-center text-center p-4">
+									<h3 class="card-title fw-bold mb-3"
+										style="text-shadow: 2px 2px 4px rgba(0,0,0,0.6);">お財布に優しい<br>格安ステイ</h3>
+									<p class="card-text fw-semibold" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.6);">
+										予算 5,000円以内の民宿</p>
+									<span class="btn btn-outline-light btn-sm mt-2 rounded-pill px-4">詳細を見る</span>
+								</div>
+							</div>
+						</a>
+					</div>
+
+					<div class="col">
+						<a th:href="@{/houses(keyword='ゲストハウス')}" class="text-decoration-none">
+							<div class="card h-100 text-white border-0 shadow-sm overflow-hidden"
+								style="border-radius: 15px;">
+								<img src="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=800"
+									class="card-img" alt="ゲストハウス特集"
+									style="height: 250px; object-fit: cover; filter: brightness(70%); transition: transform 0.3s ease;"
+									onmouseover="this.style.transform='scale(1.05)'"
+									onmouseout="this.style.transform='scale(1)'">
+								<div
+									class="card-img-overlay d-flex flex-column justify-content-center align-items-center text-center p-4">
+									<h3 class="card-title fw-bold mb-3"
+										style="text-shadow: 2px 2px 4px rgba(0,0,0,0.6);">交流を楽しむ<br>ゲストハウス</h3>
+									<p class="card-text fw-semibold" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.6);">
+										一人旅や新しい出会いに</p>
+									<span class="btn btn-outline-light btn-sm mt-2 rounded-pill px-4">詳細を見る</span>
+								</div>
+							</div>
+						</a>
+					</div>
+
+				</div>
+
 				<div class="row justify-content-center">
 					<div class="col-xl-5 col-lg-6 col-md-8">
-						<h2 class="text-center mb-3">エリアから探す</h2>
+						<h2 class="text-center moattravel-section-title">エリアから探す</h2>
 						<table class="table">
 							<!-- 
 																エリア別検索リンク

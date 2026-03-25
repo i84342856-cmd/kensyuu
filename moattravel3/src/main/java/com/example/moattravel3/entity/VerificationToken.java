@@ -30,7 +30,6 @@ public class VerificationToken {
     @Column(name = "token")
     private String token;
 
-    // データベース側で自動設定されるため、Java側からの挿入・更新を無効化
     @Column(name = "created_at", insertable = false, updatable = false)
     private Timestamp createdAt;
 

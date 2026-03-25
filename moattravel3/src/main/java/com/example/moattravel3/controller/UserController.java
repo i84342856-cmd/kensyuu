@@ -30,7 +30,6 @@ public class UserController {
 	private final UserRepository userRepository;
 	private final UserService userService;
 
-	// コンストラクタでリポジトリを注入
 	public UserController(UserRepository userRepository, UserService userService) {
 		this.userRepository = userRepository;
 		this.userService = userService;
@@ -38,22 +37,17 @@ public class UserController {
 
 	@GetMapping
 	public String index(@AuthenticationPrincipal UserDetailsImpl userDetailsImpl, Model model) {
-		// ログイン中のユーザーIDを使って、DBから最新の情報を取得
 		User user = userRepository.getReferenceById(userDetailsImpl.getUser().getId());
 
-		// 画面に「user」という名前でデータを渡す
 		model.addAttribute("user", user);
 
 		return "user/index";
 	}
 
-	// --- 会員情報の編集画面の表示 ---
 	@GetMapping("/edit")
 	public String edit(@AuthenticationPrincipal UserDetailsImpl userDetailsImpl, Model model) {
-		// ① DBから現在のユーザー情報を取得
 		User user = userRepository.getReferenceById(userDetailsImpl.getUser().getId());
 
-		// ② 取得したデータを、編集用フォーム（UserEditForm）に詰め替える
 		UserEditForm userEditForm = new UserEditForm(
 				user.getId(),
 				user.getName(),
@@ -68,13 +62,10 @@ public class UserController {
 		return "user/edit";
 	}
 
-	/**
-	 * 会員情報更新処理
-	 */
 	@PostMapping("/update")
 	public String update(@ModelAttribute @Validated UserEditForm userEditForm, BindingResult bindingResult,
 			RedirectAttributes redirectAttributes) {
-		// メールアドレスが変更されており、かつ登録済みであれば、BindingResultオブジェクトにエラー内容を追加する
+
 		if (userService.isEmailChanged(userEditForm) && userService.isEmailRegistered(userEditForm.getEmail())) {
 			FieldError fieldError = new FieldError(bindingResult.getObjectName(), "email", "すでに登録済みのメールアドレスです。");
 			bindingResult.addError(fieldError);
@@ -89,7 +80,8 @@ public class UserController {
 
 		return "redirect:/user";
 	}
-
+	
+	// 追加設定
 	@GetMapping("/delete")
 	public String delete(@AuthenticationPrincipal UserDetailsImpl userDetailsImpl, Model model) {
 		User user = userRepository.getReferenceById(userDetailsImpl.getUser().getId());
@@ -106,15 +98,16 @@ public class UserController {
 		return "user/delete";
 	}
 
+	// 追加設定
 	@PostMapping("/delete")
 	public String delete(@AuthenticationPrincipal UserDetailsImpl userDetailsImpl,
 			HttpServletRequest request,
 			RedirectAttributes redirectAttributes) throws ServletException {
 		User user = userRepository.getReferenceById(userDetailsImpl.getUser().getId());
 		userRepository.deleteById(user.getId());
-		
+
 		request.logout();
-		
+
 		redirectAttributes.addFlashAttribute("successMessage", "アカウントを削除しました");
 		return "redirect:/";
 	}

@@ -23,15 +23,10 @@ public class HouseController {
 
 	private final HouseRepository houseRepository;
 
-	// コンストラクタ注入
 	public HouseController(HouseRepository houseRepository) {
 		this.houseRepository = houseRepository;
 	}
 
-	/**
-	 * 民宿一覧ページ
-	 * キーワード、エリア、料金による検索結果をページネーションして表示する
-	 */
 	@GetMapping
 	public String index(@RequestParam(name = "keyword", required = false) String keyword,
 			@RequestParam(name = "area", required = false) String area,
@@ -40,13 +35,11 @@ public class HouseController {
 			@PageableDefault(page = 0, size = 10, sort = "id", direction = Direction.ASC) Pageable pageable,
 			Model model) {
 
-		// 1. リクエストに応じたソート(並べ替え)条件の設定
+		// 追加設定 リクエストに応じたソート(並べ替え)条件の設定
 		Sort sort;
 		if ("priceAsc".equals(order)) {
 			sort = Sort.by(Direction.ASC, "price");
 		} else if ("popular".equals(order)) {
-			// ※注意: Houseエンティティに「reservationCount」や「viewCount」等のフィールドがある前提です。
-			// 実際のフィールド名に合わせて変更してください。
 			sort = Sort.by(Direction.DESC, "reservationCount");
 		} else if ("updatedAtDesc".equals(order)) {
 			sort = Sort.by(Direction.DESC, "updatedAt");
@@ -55,10 +48,10 @@ public class HouseController {
 			order = "createdAtDesc"; // 画面の表示用にセット
 		}
 
-		// ページネーション情報にソート条件を結合
+		//  追加設定 ページネーション情報にソート条件を結合
 		Pageable sortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
 
-		// 2. 複合条件での検索（すべての条件を一つのメソッドで処理）
+		//  追加設定 複合条件での検索（すべての条件を一つのメソッドで処理）
 		Page<House> housePage = houseRepository.findBySearchConditions(keyword, area, price, sortedPageable);
 
 		/* 改修のため使用しない。
@@ -98,7 +91,6 @@ public class HouseController {
 		}
 		*/
 
-		// ビューへ渡す属性の設定
 		model.addAttribute("housePage", housePage);
 		model.addAttribute("keyword", keyword);
 		model.addAttribute("area", area);
@@ -108,15 +100,11 @@ public class HouseController {
 		return "houses/index";
 	}
 
-	/**
-	 * 民宿詳細ページ
-	 */
 	@GetMapping("/{id}")
 	public String show(@PathVariable(name = "id") Integer id, Model model) {
 		House house = houseRepository.getReferenceById(id);
 
 		model.addAttribute("house", house);
-		// 予約入力フォームを渡すことで、詳細画面での入力を可能にする
 		model.addAttribute("reservationInputForm", new ReservationInputForm());
 
 		return "houses/show";

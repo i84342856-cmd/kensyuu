@@ -17,89 +17,76 @@ import com.example.moattravel3.repository.UserRepository;
 
 @Service
 public class ReservationService {
-	
+
 	private final ReservationRepository reservationRepository;
-    private final HouseRepository houseRepository;
-    private final UserRepository userRepository;
-    
- // 資料にないのでAI作成、リポジトリを注入するためのコンストラクタ
-    public ReservationService(ReservationRepository reservationRepository, HouseRepository houseRepository, UserRepository userRepository) {
-        this.reservationRepository = reservationRepository;
-        this.houseRepository = houseRepository;
-        this.userRepository = userRepository;
-    }
-    
-    /**
-     * 宿泊人数が定員以下かどうかをチェックする
-     */
-    public boolean isWithinCapacity(Integer numberOfPeople, Integer capacity) {
-        return numberOfPeople <= capacity;
-    }
+	private final HouseRepository houseRepository;
+	private final UserRepository userRepository;
 
-    /**
-     * 宿泊料金を計算する
-     */
-    public Integer calculateAmount(LocalDate checkinDate, LocalDate checkoutDate, Integer price) {
-        // チェックイン日とチェックアウト日の日数を計算
-        long numberOfNights = ChronoUnit.DAYS.between(checkinDate, checkoutDate);
-        // 1泊料金 × 宿泊数
-        int amount = price * (int) numberOfNights;
-        return amount;
-    }
-    
-    /**
-     * 資料にないのでAI作成、予約データをデータベースに登録する
-     */
-    @Transactional
-    public void create(ReservationRegisterForm reservationRegisterForm) {
-        Reservation reservation = new Reservation();
-        House house = houseRepository.getReferenceById(reservationRegisterForm.getHouseId());
-        User user = userRepository.getReferenceById(reservationRegisterForm.getUserId());
-        LocalDate checkinDate = LocalDate.parse(reservationRegisterForm.getCheckinDate());
-        LocalDate checkoutDate = LocalDate.parse(reservationRegisterForm.getCheckoutDate());
+	public ReservationService(ReservationRepository reservationRepository, HouseRepository houseRepository,
+			UserRepository userRepository) {
+		this.reservationRepository = reservationRepository;
+		this.houseRepository = houseRepository;
+		this.userRepository = userRepository;
+	}
 
-        reservation.setHouse(house);
-        reservation.setUser(user);
-        reservation.setCheckinDate(checkinDate);
-        reservation.setCheckoutDate(checkoutDate);
-        reservation.setNumberOfPeople(reservationRegisterForm.getNumberOfPeople());
-        reservation.setAmount(reservationRegisterForm.getAmount());
+	public boolean isWithinCapacity(Integer numberOfPeople, Integer capacity) {
+		return numberOfPeople <= capacity;
+	}
 
-        reservationRepository.save(reservation);
-    }
-    
-    /**
-     * Stripeのセッション完了後に、Map形式のメタデータを受け取って予約を登録する
-     */
-    @Transactional
-    public void create(Map<String, String> paymentIntentObject) {
-        Reservation reservation = new Reservation();
+	public Integer calculateAmount(LocalDate checkinDate, LocalDate checkoutDate, Integer price) {
+		long numberOfNights = ChronoUnit.DAYS.between(checkinDate, checkoutDate);
+		int amount = price * (int) numberOfNights;
+		return amount;
+	}
 
-        // Mapから値を取り出して型変換を行う
-        Integer houseId = Integer.valueOf(paymentIntentObject.get("houseId"));
-        Integer userId = Integer.valueOf(paymentIntentObject.get("userId"));
-        Integer numberOfPeople = Integer.valueOf(paymentIntentObject.get("numberOfPeople"));
-        Integer amount = Integer.valueOf(paymentIntentObject.get("amount"));
-        LocalDate checkinDate = LocalDate.parse(paymentIntentObject.get("checkinDate"));
-        LocalDate checkoutDate = LocalDate.parse(paymentIntentObject.get("checkoutDate"));
 
-        // IDをもとにエンティティを取得
-        House house = houseRepository.getReferenceById(houseId);
-        User user = userRepository.getReferenceById(userId);
+	@Transactional
+	public void create(ReservationRegisterForm reservationRegisterForm) {
+		Reservation reservation = new Reservation();
+		House house = houseRepository.getReferenceById(reservationRegisterForm.getHouseId());
+		User user = userRepository.getReferenceById(reservationRegisterForm.getUserId());
+		LocalDate checkinDate = LocalDate.parse(reservationRegisterForm.getCheckinDate());
+		LocalDate checkoutDate = LocalDate.parse(reservationRegisterForm.getCheckoutDate());
 
-        // 予約エンティティにセット
-        reservation.setHouse(house);
-        reservation.setUser(user);
-        reservation.setCheckinDate(checkinDate);
-        reservation.setCheckoutDate(checkoutDate);
-        reservation.setNumberOfPeople(numberOfPeople);
-        reservation.setAmount(amount);
+		reservation.setHouse(house);
+		reservation.setUser(user);
+		reservation.setCheckinDate(checkinDate);
+		reservation.setCheckoutDate(checkoutDate);
+		reservation.setNumberOfPeople(reservationRegisterForm.getNumberOfPeople());
+		reservation.setAmount(reservationRegisterForm.getAmount());
 
-        // 保存
-        reservationRepository.save(reservation);
-        
-     // ▼ここから追記：予約数を+1して更新する
-        house.setReservationCount(house.getReservationCount() + 1);
-        houseRepository.save(house);
-    }
+		reservationRepository.save(reservation);
+	}
+
+	@Transactional
+	public void create(Map<String, String> paymentIntentObject, String paymentIntentId) {
+		Reservation reservation = new Reservation();
+
+		Integer houseId = Integer.valueOf(paymentIntentObject.get("houseId"));
+		Integer userId = Integer.valueOf(paymentIntentObject.get("userId"));
+		Integer numberOfPeople = Integer.valueOf(paymentIntentObject.get("numberOfPeople"));
+		Integer amount = Integer.valueOf(paymentIntentObject.get("amount"));
+		LocalDate checkinDate = LocalDate.parse(paymentIntentObject.get("checkinDate"));
+		LocalDate checkoutDate = LocalDate.parse(paymentIntentObject.get("checkoutDate"));
+
+		House house = houseRepository.getReferenceById(houseId);
+		User user = userRepository.getReferenceById(userId);
+
+		reservation.setHouse(house);
+		reservation.setUser(user);
+		reservation.setCheckinDate(checkinDate);
+		reservation.setCheckoutDate(checkoutDate);
+		reservation.setNumberOfPeople(numberOfPeople);
+		reservation.setAmount(amount);
+
+		// 追加：Stripeの決済IDをエンティティにセットする
+		reservation.setStripePaymentIntentId(paymentIntentId);
+
+		// 保存
+		reservationRepository.save(reservation);
+
+		// ▼ここから追記：予約数を+1して更新する
+		house.setReservationCount(house.getReservationCount() + 1);
+		houseRepository.save(house);
+	}
 }

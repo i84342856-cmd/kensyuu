@@ -10,7 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data
-@AllArgsConstructor // 全フィールドを引数に持つコンストラクタを生成（編集データの詰め替え用）
+@AllArgsConstructor
 public class HouseEditForm {
 
     @NotNull

@@ -48,56 +48,41 @@ public class UserService {
 
 		return userRepository.save(user);
 	}
-	
-	/**
-     * ユーザー情報更新
-     */
-    @Transactional
-    public void update(UserEditForm userEditForm) {
-        User user = userRepository.getReferenceById(userEditForm.getId());
 
-        user.setName(userEditForm.getName());
-        user.setFurigana(userEditForm.getFurigana());
-        user.setPostalCode(userEditForm.getPostalCode());
-        user.setAddress(userEditForm.getAddress());
-        user.setPhoneNumber(userEditForm.getPhoneNumber());
-        user.setEmail(userEditForm.getEmail());
 
-        userRepository.save(user);
-    }
-    
-	/**
-	 * メールアドレスが登録済みかどうかをチェックする
-	 * @param email チェック対象のメールアドレス
-	 * @return 登録済みならtrue、未登録ならfalse
-	 */
+	@Transactional
+	public void update(UserEditForm userEditForm) {
+		User user = userRepository.getReferenceById(userEditForm.getId());
+
+		user.setName(userEditForm.getName());
+		user.setFurigana(userEditForm.getFurigana());
+		user.setPostalCode(userEditForm.getPostalCode());
+		user.setAddress(userEditForm.getAddress());
+		user.setPhoneNumber(userEditForm.getPhoneNumber());
+		user.setEmail(userEditForm.getEmail());
+
+		userRepository.save(user);
+	}
+
 	public boolean isEmailRegistered(String email) {
 		User user = userRepository.findByEmail(email);
 		return user != null;
 	}
+
+	public boolean isSamePassword(String password, String passwordConfirmation) {
+		return password.equals(passwordConfirmation);
+	}
+
+	// ユーザーを有効化する（メール認証成功時などに使用）
+	@Transactional
+	public void enableUser(User user) {
+		user.setEnabled(true);
+		userRepository.save(user);
+	}
+
 	
-	/**
-     * パスワードとパスワード（確認用）の入力値が一致するかどうかをチェックする
-     * @param password 入力されたパスワード
-     * @param passwordConfirmation 入力された確認用パスワード
-     * @return 一致していればtrue、一致していなければfalse
-     */
-    public boolean isSamePassword(String password, String passwordConfirmation) {
-        return password.equals(passwordConfirmation);
-    }
-    
- // ユーザーを有効化する（メール認証成功時などに使用）
-    @Transactional
-    public void enableUser(User user) {
-        user.setEnabled(true); 
-        userRepository.save(user);
-    }
-    
-    /**
-     * メールアドレスが変更されたかどうかをチェックする
-     */
-    public boolean isEmailChanged(UserEditForm userEditForm) {
-        User currentUser = userRepository.getReferenceById(userEditForm.getId());
-        return !userEditForm.getEmail().equals(currentUser.getEmail());
-    }
+	public boolean isEmailChanged(UserEditForm userEditForm) {
+		User currentUser = userRepository.getReferenceById(userEditForm.getId());
+		return !userEditForm.getEmail().equals(currentUser.getEmail());
+	}
 }

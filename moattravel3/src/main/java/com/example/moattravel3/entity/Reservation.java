@@ -19,40 +19,44 @@ import lombok.Data;
 @Data
 public class Reservation {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
-    private Integer id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "id")
+	private Integer id;
 
-    // ======== 外部キーによるリレーションシップ ========
-    
-    @ManyToOne
-    @JoinColumn(name = "house_id")
-    private House house;
+	// ======== 外部キーによるリレーションシップ ========
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
-    private User user;
+	@ManyToOne
+	@JoinColumn(name = "house_id")
+	private House house;
 
-    // ======== 予約詳細情報 ========
+	@ManyToOne
+	@JoinColumn(name = "user_id")
+	private User user;
 
-    @Column(name = "checkin_date")
-    private LocalDate checkinDate;
+	// ======== 予約詳細情報 ========
 
-    @Column(name = "checkout_date")
-    private LocalDate checkoutDate;
+	@Column(name = "checkin_date")
+	private LocalDate checkinDate;
 
-    @Column(name = "number_of_people")
-    private Integer numberOfPeople;
+	@Column(name = "checkout_date")
+	private LocalDate checkoutDate;
 
-    @Column(name = "amount")
-    private Integer amount;
+	@Column(name = "number_of_people")
+	private Integer numberOfPeople;
 
-    // ======== 監査用（自動更新） ========
+	@Column(name = "amount")
+	private Integer amount;
 
-    @Column(name = "created_at", insertable = false, updatable = false)
-    private Timestamp createdAt;
+	// ======== 監査用（自動更新） ========
 
-    @Column(name = "updated_at", insertable = false, updatable = false)
-    private Timestamp updatedAt;
+	@Column(name = "created_at", insertable = false, updatable = false)
+	private Timestamp createdAt;
+
+	@Column(name = "updated_at", insertable = false, updatable = false)
+	private Timestamp updatedAt;
+
+	// 返金処理のためのID
+	@Column(name = "stripe_payment_intent_id")
+	private String stripePaymentIntentId;
 }

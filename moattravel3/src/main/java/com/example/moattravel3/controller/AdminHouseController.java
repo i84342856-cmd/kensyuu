@@ -30,25 +30,10 @@ import com.example.moattravel3.service.HouseService;
 
 public class AdminHouseController {
 
-	/*　今回の方法はコンストラクタ注入という。フィールドにfinal定義しておき、
-	 * コンストラクタで注入するというもの。
-	 * より簡単に書く（コンストラクタの省略）には、
-	 * @Controller
-	 * @RequiredArgsConstructor // これでコンストラクタを自動作成
-	 * public class UserController {
-	private final UserService userService; // finalで安全性を確保
-	}
-	
-	 Alt + Shift R = リファクタリング
-	 Ctrl + Shift F = 整地
-	 */
-
 	private final HouseRepository houseRepository;
 	private final HouseService houseService;
 
 	@Autowired
-	// コンストラクタインジェクションを使う場合、@Autowired必要。
-	// 今回のようにコンストラクタが1つしかない場合は以下のように省略が可能です。
 	public AdminHouseController(HouseRepository houseRepository, HouseService houseService) {
 		this.houseRepository = houseRepository;
 		this.houseService = houseService;
@@ -63,7 +48,7 @@ public class AdminHouseController {
 
 		if (keyword != null && !keyword.isEmpty()) {
 			housePage = houseRepository.findByNameLike("%" + keyword + "%", pageable);
-		} else { //"%" + "侍" + "%"→ 「前に何があってもいい + 侍 + 後ろに何があってもいい」
+		} else {
 			housePage = houseRepository.findAll(pageable);
 		}
 
@@ -94,12 +79,8 @@ public class AdminHouseController {
 		}
 		houseService.create(houseRegisterForm);
 
-		// リダイレクト（画面移動）先のページへ、「成功メッセージ」を預ける
-		// 通常のModelと違い、リダイレクト後の新しいページでもこのメッセージを受け取ることができる
 		redirectAttributes.addFlashAttribute("successMessage", "民宿を登録しました。");
 
-		//ブラウザに対して「/admin/houses（一覧画面）を読み込み直して」と命令を出す
-		// 直接その画面を表示するのではなく、URLを切り替えさせることで「ブラウザ更新による二重登録」を防ぐ
 		return "redirect:/admin/houses";
 	}
 
@@ -107,13 +88,8 @@ public class AdminHouseController {
 	public String edit(@PathVariable(name = "id") Integer id, Model model) {
 		House house = houseRepository.getReferenceById(id);
 
-		// 現在登録されている画像名を取得（画面表示用）
 		String imageName = house.getImageName();
 
-		// ※ MultipartFile（画像ファイル）は新規アップロード用なので、ここでは null を渡す
-		// これはコンストラクタだけでフィールドをセットしようとしている。
-		// そのためにHouseEditFormでは「@AllArgsConstructor」をつけて、コンストラクタの定義を省略している。
-		// 通常のセットの場合では、new()生成した後に、「houseEditForm.name = house.setName()」と書かないといけない。
 		HouseEditForm houseEditForm = new HouseEditForm(
 				house.getId(),
 				house.getName(),
@@ -137,18 +113,15 @@ public class AdminHouseController {
 			@ModelAttribute @Validated HouseEditForm houseEditForm,
 			BindingResult bindingResult,
 			RedirectAttributes redirectAttributes) {
-		// 1. 入力チェック（バリデーション）に引っかかった場合、編集画面に戻す
+
 		if (bindingResult.hasErrors()) {
 			return "admin/houses/edit";
 		}
 
-		// 2. サービス層に処理を依頼してDBを更新する
 		houseService.update(houseEditForm);
 
-		// 3. 一時的な成功メッセージをセット
 		redirectAttributes.addFlashAttribute("successMessage", "民宿情報を編集しました。");
 
-		// 4. 一覧画面へリダイレクト
 		return "redirect:/admin/houses";
 	}
 

@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS reservations (
     amount           INT      NOT NULL,
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 返金処理用のID
+    stripe_payment_intent_id VARCHAR(255),
     FOREIGN KEY (house_id) REFERENCES houses (id),
     FOREIGN KEY (user_id)  REFERENCES users (id)
 );

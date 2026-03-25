@@ -12,34 +12,31 @@ import com.example.moattravel3.service.VerificationTokenService;
 
 @Component
 public class SignupEventListener {
-    private final VerificationTokenService verificationTokenService;
-    private final JavaMailSender javaMailSender;
+	private final VerificationTokenService verificationTokenService;
+	private final JavaMailSender javaMailSender;
 
-    public SignupEventListener(VerificationTokenService verificationTokenService, JavaMailSender mailSender) {
-        this.verificationTokenService = verificationTokenService;
-        this.javaMailSender = mailSender;
-    }
+	public SignupEventListener(VerificationTokenService verificationTokenService, JavaMailSender mailSender) {
+		this.verificationTokenService = verificationTokenService;
+		this.javaMailSender = mailSender;
+	}
 
-    @EventListener
-    private void onSignupEvent(SignupEvent signupEvent) {
-        User user = signupEvent.getUser();
-        
-        // 1. 認証用のランダムなトークンを生成し、DBに保存する
-        String token = UUID.randomUUID().toString();
-        verificationTokenService.create(user, token);
+	@EventListener
+	private void onSignupEvent(SignupEvent signupEvent) {
+		User user = signupEvent.getUser();
 
-        // 2. メールの送信先、件名、URL、本文を設定する
-        String recipientAddress = user.getEmail();
-        String subject = "メール認証";
-        String confirmationUrl = signupEvent.getRequestUrl() + "/verify?token=" + token;
-        String message = "以下のリンクをクリックして会員登録を完了してください。";
+		String token = UUID.randomUUID().toString();
+		verificationTokenService.create(user, token);
 
-        // 3. メールを作成して送信する
-        SimpleMailMessage mailMessage = new SimpleMailMessage();
-        mailMessage.setTo(recipientAddress);
-        mailMessage.setSubject(subject);
-        mailMessage.setText(message + "\n" + confirmationUrl);
-        
-        javaMailSender.send(mailMessage);
-    }
+		String recipientAddress = user.getEmail();
+		String subject = "メール認証";
+		String confirmationUrl = signupEvent.getRequestUrl() + "/verify?token=" + token;
+		String message = "以下のリンクをクリックして会員登録を完了してください。";
+
+		SimpleMailMessage mailMessage = new SimpleMailMessage();
+		mailMessage.setTo(recipientAddress);
+		mailMessage.setSubject(subject);
+		mailMessage.setText(message + "\n" + confirmationUrl);
+
+		javaMailSender.send(mailMessage);
+	}
 }

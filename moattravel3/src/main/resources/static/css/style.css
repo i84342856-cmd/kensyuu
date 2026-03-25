@@ -66,6 +66,31 @@ footer {
 	background-color: #f2f0eb;
 }
 
+/* =====================================
+   トップページ等のセクションタイトル装飾
+   ===================================== */
+.moattravel-section-title {
+    font-weight: 500; /* 文字を太くして目立たせる */
+    letter-spacing: 0.1em; /* 文字の間隔を少し空けて上品な印象に */
+    color: #333; /* 濃いグレーでスタイリッシュに */
+    position: relative;
+    padding-bottom: 15px; /* 下線を入れるための隙間 */
+    margin-bottom: 2.5rem !important; /* 下の要素との余白をしっかり取る */
+}
+
+/* タイトルの下に短いアクセントラインを引く */
+.moattravel-section-title::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%); /* 線を完全に中央揃えにするおまじない */
+    width: 120px; /* 線の長さ */
+    height: 4px; /* 線の太さ */
+    background-color: #219ebd; /* アクセントカラー（爽やかなブルー・テーマに合わせて変更OK） */
+    border-radius: 2px; /* 線の端を少し丸くする */
+}
+	
 /* ====================================
    ボタン (Buttons)
    ==================================== */

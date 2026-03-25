@@ -13,13 +13,10 @@ import com.example.moattravel3.entity.House;
 public interface HouseRepository extends JpaRepository<House, Integer> {
 	public Page<House> findByNameLike(String keyword, Pageable pageable);
 
-	// 民宿名または住所で検索（部分一致）
 	public Page<House> findByNameLikeOrAddressLike(String nameKeyword, String addressKeyword, Pageable pageable);
 
-	//住所（エリア）で検索（部分一致）
 	Page<House> findByAddressLike(String area, Pageable pageable);
 
-	// 指定された金額以下の宿泊料金で検索
 	Page<House> findByPriceLessThanEqual(Integer price, Pageable pageable);
 
 	/* =======================================================
@@ -48,14 +45,15 @@ public interface HouseRepository extends JpaRepository<House, Integer> {
 
 	Page<House> findAllByOrderByPriceAsc(Pageable pageable);
 
-	/**
-	 * トップページ用：新しく登録された民宿を最大10件取得する
-	 */
 	List<House> findTop10ByOrderByCreatedAtDesc();
+	
+	// 追加設定
+	List<House> findTop5ByOrderByReservationCountDesc();
 
 	/* =======================================================
 	 * 【新規追加】複合条件検索（キーワード AND エリア AND 予算）
-	 * ======================================================= */
+	 * =======================================================
+	 * Spring Data JPAのRepositoryインターフェース内に記述される、カスタムクエリ（JPQL）を用いた検索メソッド */
 	@Query("SELECT h FROM House h WHERE " +
 			"(:keyword IS NULL OR :keyword = '' OR h.name LIKE CONCAT('%', :keyword, '%') OR h.address LIKE CONCAT('%', :keyword, '%')) "
 			+
