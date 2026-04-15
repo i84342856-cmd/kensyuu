@@ -1,220 +1,366 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-    <meta charset="UTF-8">
-    <title>Crypto Pro - Multi-Timeframe Engine</title>
-    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
-    <style>
-        body { font-family: sans-serif; background: #1e222d; color: #d1d4dc; margin: 0; padding: 20px; }
-        .layout { display: flex; gap: 20px; }
-        .main-col { flex: 3; }
-        .side-col { flex: 1; background: #2b313f; padding: 15px; border-radius: 8px; height: fit-content; border: 1px solid #434651;}
-        .controls { background: #2b313f; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; border: 1px solid #434651;}
-        select, button { padding: 8px 12px; border-radius: 4px; border: 1px solid #434651; background: #1e222d; color: #d1d4dc; cursor: pointer; }
-        button { background: #2962ff; color: white; border: none; font-weight: bold; }
-        #chart-container { height: 500px; border-radius: 8px; overflow: hidden; border: 1px solid #434651; }
-        .history-container { margin-top: 20px; background: #2b313f; padding: 15px; border-radius: 8px; border: 1px solid #434651;}
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-        th, td { padding: 10px; border-bottom: 1px solid #434651; text-align: left; }
-        .buy { color: #26a69a; font-weight: bold; } .sell { color: #ef5350; font-weight: bold; }
-        .setting-item { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; border-bottom: 1px solid #434651; padding-bottom: 8px; }
-        input[type="checkbox"] { transform: scale(1.3); cursor: pointer; }
-        .batch-btn { background: #00c853; font-size: 15px; padding: 10px 20px; }
-        .batch-btn:hover { background: #00e676; }
-    </style>
+	<meta charset="UTF-8">
+	<title>Crypto Pro - Multi-Timeframe Engine</title>
+	<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+	<style>
+		body {
+			font-family: sans-serif;
+			background: #1e222d;
+			color: #d1d4dc;
+			margin: 0;
+			padding: 20px;
+		}
+
+		.layout {
+			display: flex;
+			gap: 20px;
+		}
+
+		.main-col {
+			flex: 3;
+		}
+
+		.side-col {
+			flex: 1;
+			background: #2b313f;
+			padding: 15px;
+			border-radius: 8px;
+			height: fit-content;
+			border: 1px solid #434651;
+		}
+
+		.controls {
+			background: #2b313f;
+			padding: 15px;
+			border-radius: 8px;
+			margin-bottom: 20px;
+			display: flex;
+			gap: 15px;
+			align-items: center;
+			border: 1px solid #434651;
+		}
+
+		select,
+		button {
+			padding: 8px 12px;
+			border-radius: 4px;
+			border: 1px solid #434651;
+			background: #1e222d;
+			color: #d1d4dc;
+			cursor: pointer;
+		}
+
+		button {
+			background: #2962ff;
+			color: white;
+			border: none;
+			font-weight: bold;
+		}
+
+		/* 🔽 修正後 (overflow: hidden; を削除) */
+		#chart-container {
+			height: 500px;
+			border-radius: 8px;
+			border: 1px solid #434651;
+		}
+
+		.history-container {
+			margin-top: 20px;
+			background: #2b313f;
+			padding: 15px;
+			border-radius: 8px;
+			border: 1px solid #434651;
+		}
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			margin-top: 10px;
+			font-size: 13px;
+		}
+
+		th,
+		td {
+			padding: 10px;
+			border-bottom: 1px solid #434651;
+			text-align: left;
+		}
+
+		.buy {
+			color: #26a69a;
+			font-weight: bold;
+		}
+
+		.sell {
+			color: #ef5350;
+			font-weight: bold;
+		}
+
+		.setting-item {
+			display: flex;
+			justify-content: space-between;
+			margin-bottom: 10px;
+			font-size: 14px;
+			border-bottom: 1px solid #434651;
+			padding-bottom: 8px;
+		}
+
+		input[type="checkbox"] {
+			transform: scale(1.3);
+			cursor: pointer;
+		}
+
+		.batch-btn {
+			background: #00c853;
+			font-size: 15px;
+			padding: 10px 20px;
+		}
+
+		.batch-btn:hover {
+			background: #00e676;
+		}
+	</style>
 </head>
+
 <body>
-    <div class="controls">
-        <select id="symbolSelect"></select>
-        <select id="timeframeSelect">
-            <option value="M1">1分足</option>
-            <option value="M5" selected>5分足</option>
-            <option value="M15">15分足</option>
-            <option value="H1">1時間足</option>
-        </select>
-        <button id="loadBtn">チャート表示</button>
-        <button id="enableAllBtn" class="batch-btn">🔥 全通貨の「5分足」監視を一括ON</button>
-        <span style="margin-left:auto; color:#2962ff; font-weight:bold;" id="system-status">⏳ システム準備中...</span>
-    </div>
+	<div class="controls">
+		<select id="symbolSelect"></select>
+		<select id="timeframeSelect">
+			<option value="M1">1分足</option>
+			<option value="M5" selected>5分足</option>
+			<option value="M15">15分足</option>
+			<option value="M30">30分足</option>
+			<option value="H1">1時間足</option>
+			<option value="D1">日足</option>
+			<option value="W1">週足</option>
+		</select>
+		</select>
+		<button id="loadBtn">チャート表示</button>
+		<button id="enableAllBtn" class="batch-btn">🔥 全通貨の「1分/5分/15分/30分足」を一括ON</button>
+		<span style="margin-left:auto; color:#2962ff; font-weight:bold;" id="system-status">⏳ システム準備中...</span>
+	</div>
 
-    <div class="layout">
-        <div class="main-col">
-            <div id="chart-container"></div>
-            <div class="history-container">
-                <h3>売買履歴 <span style="float:right">合計損益: <span id="total-pnl">0</span> JPY</span></h3>
-                <table id="trade-history">
-                    <thead><tr><th>時刻</th><th>通貨</th><th>足</th><th>売買</th><th>価格</th><th>数量</th><th>約定金額</th><th>損益</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-        <div class="side-col">
-            <h3 style="margin-top:0; color:#26a69a;">⚙️ 監視設定 (個別)</h3>
-            <p style="font-size:12px; color:#aaa;">現在表示中の通貨のみの個別設定です。</p>
-            <div id="monitor-settings"></div>
-            
-            <hr style="border-color:#434651; margin: 20px 0;">
-            <h3 style="color:#2962ff;">🤖 稼働中の全Bot一覧</h3>
-            <div id="active-bots-list" style="font-size:13px; color:#ffb74d;">取得中...</div>
-        </div>
-    </div>
+	<div class="layout">
+		<div class="main-col">
+			<div id="chart-container"></div>
+			<div class="history-container">
+				<h3>売買履歴 <span style="float:right">合計損益: <span id="total-pnl">0</span> JPY</span></h3>
+				<table id="trade-history">
+					<thead>
+						<tr>
+							<th>時刻</th>
+							<th>通貨</th>
+							<th>足</th>
+							<th>売買</th>
+							<th>価格</th>
+							<th>数量</th>
+							<th>約定金額</th>
+							<th>損益</th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+			</div>
+		</div>
+		<div class="side-col">
+			<h3 style="margin-top:0; color:#26a69a;">⚙️ 監視設定 (個別)</h3>
+			<p style="font-size:12px; color:#aaa;">現在表示中の通貨のみの個別設定です。</p>
+			<div id="monitor-settings"></div>
 
-    <script>
-        const symbols = ["BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "BCH_JPY", "LTC_JPY", "MONA_JPY", "XLM_JPY", "BAT_JPY", "DOT_JPY", "LINK_JPY", "XYM_JPY", "MATIC_JPY", "SHIB_JPY", "DOGE_JPY", "ADA_JPY", "AVAX_JPY", "SAND_JPY", "CHZ_JPY", "FLR_JPY"];
-        const timeframes = ["M1", "M5", "M15", "H1"];
-        const select = document.getElementById("symbolSelect");
-        symbols.forEach(s => select.add(new Option(s, s)));
+			<hr style="border-color:#434651; margin: 20px 0;">
+			<h3 style="color:#2962ff;">🤖 稼働中の全Bot一覧</h3>
+			<div id="active-bots-list" style="font-size:13px; color:#ffb74d;">取得中...</div>
+		</div>
+	</div>
+
+	<script>
+		const candleSeries = chart.addCandlestickSeries({upColor: '#26a69a', downColor: '#ef5350', borderVisible: false});
+
+		// ★ 各MAシリーズの作成
+		const ma5Series = chart.addLineSeries({color: '#2962ff', lineWidth: 2});   // 青
+		const ma10Series = chart.addLineSeries({color: '#4caf50', lineWidth: 1});  // 緑
+		const ma25Series = chart.addLineSeries({color: '#ff1744', lineWidth: 1});  // 赤
+		const ma50Series = chart.addLineSeries({color: '#ffeb3b', lineWidth: 1});  // 黄
+		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  // オレンジ
+		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); // 紫
+		// 
+
+		const symbols = ["BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "BCH_JPY", "LTC_JPY", "MONA_JPY", "XLM_JPY", "BAT_JPY", "DOT_JPY", "LINK_JPY", "XYM_JPY", "MATIC_JPY", "SHIB_JPY", "DOGE_JPY", "ADA_JPY", "AVAX_JPY", "SAND_JPY", "CHZ_JPY", "FLR_JPY"];
+		const timeframes = ["M1", "M5", "M15", "M30", "H1", "D1", "W1"];
+		const select = document.getElementById("symbolSelect");
+		symbols.forEach(s => select.add(new Option(s, s)));
 
 		const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
-		    layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
-		    grid: { vertLines: { color: '#2b313f' }, horzLines: { color: '#2b313f' } },
-		    timeScale: { 
-		        timeVisible: true,        // 時間を表示
-		        secondsVisible: false,    // 秒の表示を消してスッキリさせる
-		        rightOffset: 15           // 右端に少し余白を作って見切れを防ぐ
-		    },
-		    localization: {
-		        locale: 'ja-JP',          // 日本のロケールを指定
-		        dateFormat: 'yyyy/MM/dd', // 日付フォーマットを見やすく
-		    }
+			autoSize: true, // ★自動リサイズを有効化して見切れを防止
+			layout: {background: {color: '#1e222d'}, textColor: '#d1d4dc'},
+			grid: {vertLines: {color: '#2b313f'}, horzLines: {color: '#2b313f'}},
+			timeScale: {
+				timeVisible: true,
+				secondsVisible: false,
+				rightOffset: 15
+			},
+			localization: {
+				locale: 'ja-JP',
+				dateFormat: 'yyyy/MM/dd',
+			}
 		});
-        
-        const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false });
-        const ma5Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 2 });
-        const ma25Series = chart.addLineSeries({ color: '#FF1744', lineWidth: 1 });
 
-        let stompClient = null;
-        let currentSub = null;
-        let totalPnl = 0;
-        let lastBuyPrices = {};
+		const candleSeries = chart.addCandlestickSeries({upColor: '#26a69a', downColor: '#ef5350', borderVisible: false});
+		const ma5Series = chart.addLineSeries({color: '#2962ff', lineWidth: 2});
+		const ma25Series = chart.addLineSeries({color: '#FF1744', lineWidth: 1});
 
-        function cleanData(arr) {
-            if(!arr || arr.length === 0) return [];
-            const map = new Map();
-            arr.forEach(item => map.set(item.time, item));
-            return Array.from(map.values()).sort((a, b) => a.time - b.time);
-        }
+		let stompClient = null;
+		let currentSub = null;
+		let totalPnl = 0;
+		let lastBuyPrices = {};
 
-        async function loadSettings() {
-            const res = await fetch('/api/settings/monitor');
-            const settings = await res.json();
-            
-            const container = document.getElementById('monitor-settings');
-            container.innerHTML = '';
-            const curSym = select.value;
-            timeframes.forEach(tf => {
-                const key = curSym + "_" + tf;
-                const active = settings[key] || false;
-                const div = document.createElement('div');
-                div.className = 'setting-item';
-                div.innerHTML = `<span><b>${tf}</b> 監視</span><input type="checkbox" ${active?'checked':''} onchange="toggleSetting('${curSym}','${tf}',this.checked)">`;
-                container.appendChild(div);
-            });
+		function cleanData(arr) {
+			if (!arr || arr.length === 0) return [];
+			const map = new Map();
+			arr.forEach(item => map.set(item.time, item));
+			return Array.from(map.values()).sort((a, b) => a.time - b.time);
+		}
 
-            // 稼働中Bot一覧の更新
-            const activeBotsContainer = document.getElementById('active-bots-list');
-            activeBotsContainer.innerHTML = '';
-            let activeCount = 0;
-            for (const [key, isActive] of Object.entries(settings)) {
-                if (isActive) {
-                    activeCount++;
-                    const parts = key.split('_');
-                    const tf = parts.pop();
-                    const sym = parts.join('_');
-                    activeBotsContainer.innerHTML += `<div style="margin-bottom:5px;">✅ <b>${sym}</b> (${tf}足)</div>`;
-                }
-            }
-            if (activeCount === 0) activeBotsContainer.innerHTML = '<span style="color:#aaa;">現在稼働しているBotはありません</span>';
-        }
+		async function loadSettings() {
+			const res = await fetch('/api/settings/monitor');
+			const settings = await res.json();
 
-        async function toggleSetting(sym, tf, active) {
-            await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${active}`, {method: 'POST'});
-            loadSettings();
-        }
+			const container = document.getElementById('monitor-settings');
+			container.innerHTML = '';
+			const curSym = select.value;
+			timeframes.forEach(tf => {
+				const key = curSym + "_" + tf;
+				const active = settings[key] || false;
+				const div = document.createElement('div');
+				div.className = 'setting-item';
+				div.innerHTML = `<span><b>${tf}</b> 監視</span><input type="checkbox" ${active ? 'checked' : ''} onchange="toggleSetting('${curSym}','${tf}',this.checked)">`;
+				container.appendChild(div);
+			});
 
-        document.getElementById('enableAllBtn').onclick = async () => {
-            const btn = document.getElementById('enableAllBtn');
-            btn.innerText = "🔄 起動中...";
-            await fetch('/api/settings/monitor/all?timeframe=M5', {method: 'POST'});
-            btn.innerText = "🔥 全通貨の「5分足」監視を一括ON";
-            loadSettings();
-        };
+			// 稼働中Bot一覧の更新
+			const activeBotsContainer = document.getElementById('active-bots-list');
+			activeBotsContainer.innerHTML = '';
+			let activeCount = 0;
+			for (const [key, isActive] of Object.entries(settings)) {
+				if (isActive) {
+					activeCount++;
+					const parts = key.split('_');
+					const tf = parts.pop();
+					const sym = parts.join('_');
+					activeBotsContainer.innerHTML += `<div style="margin-bottom:5px;">✅ <b>${sym}</b> (${tf}足)</div>`;
+				}
+			}
+			if (activeCount === 0) activeBotsContainer.innerHTML = '<span style="color:#aaa;">現在稼働しているBotはありません</span>';
+		}
 
-        async function loadChartData() {
-            const sym = document.getElementById('symbolSelect').value;
-            const tf = document.getElementById('timeframeSelect').value;
-            try {
-                const res = await fetch(`/api/chart/init?symbol=${sym}&timeframe=${tf}`);
-                const data = await res.json();
-                candleSeries.setData(cleanData(data.candles));
-                ma5Series.setData(cleanData(data.ma5));
-                ma25Series.setData(cleanData(data.ma25));
+		async function toggleSetting(sym, tf, active) {
+			await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${active}`, {method: 'POST'});
+			loadSettings();
+		}
 
-                if(currentSub) currentSub.unsubscribe();
-                currentSub = stompClient.subscribe(`/topic/${sym}_${tf}`, (msg) => {
-                    const d = JSON.parse(msg.body);
-                    candleSeries.update(d.currentCandle);
-                    if(d.currentMa5 > 0) ma5Series.update({time: d.currentCandle.time, value: d.currentMa5});
-                    // デバッグ用: 受信したらコンソールに表示
-                    console.log(`[${sym}_${tf}] Tick受信: ${d.currentCandle.close}`);
-                });
-                loadSettings(); 
-            } catch(e) { console.error("チャート取得エラー", e); }
-        }
+		document.getElementById('enableAllBtn').onclick = async () => {
+			const btn = document.getElementById('enableAllBtn');
+			btn.innerText = "🔄 起動中...";
 
-        document.getElementById('loadBtn').onclick = loadChartData;
-        document.getElementById('symbolSelect').onchange = loadSettings;
+			// ★ 1分、5分、15分、30分足を順番に一括ONにする
+			const targetTimeframes = ["M1", "M5", "M15", "M30"];
+			for (const tf of targetTimeframes) {
+				await fetch(`/api/settings/monitor/all?timeframe=${tf}`, {method: 'POST'});
+			}
 
-        async function fetchHistory() {
-            try {
-                const res = await fetch('/api/trades/history');
-                const trades = await res.json();
-                document.getElementById('trade-history').tBodies[0].innerHTML = '';
-                totalPnl = 0; lastBuyPrices = {};
-                trades.reverse().forEach(addTradeRow);
-            } catch(e) { console.error(e); }
-        }
+			btn.innerText = "🔥 全通貨の「1分/5分/15分/30分足」を一括ON";
+			loadSettings();
+		};
 
-        function addTradeRow(t) {
-            const tbody = document.getElementById('trade-history').tBodies[0];
-            const row = tbody.insertRow(0);
+		async function loadChartData() {
+			const sym = document.getElementById('symbolSelect').value;
+			const tf = document.getElementById('timeframeSelect').value;
+			try {
+				const res = await fetch(`/api/chart/init?symbol=${sym}&timeframe=${tf}`);
+				const data = await res.json();
+				candleSeries.setData(cleanData(data.candles));
+				ma5Series.setData(cleanData(data.ma5));
+				ma10Series.setData(cleanData(data.ma10)); // ★追加
+				ma25Series.setData(cleanData(data.ma25));
+				ma50Series.setData(cleanData(data.ma50)); // ★追加
+				ma75Series.setData(cleanData(data.ma75)); // ★追加
+				ma100Series.setData(cleanData(data.ma100)); // ★追加
 
-            if(t.side === 'SYSTEM BOOTING' || t.side === 'SYSTEM READY' || t.side === 'INFO') {
-                row.innerHTML = `<td>${new Date(t.time*1000).toLocaleTimeString()}</td><td colspan="7" style="color:#2962ff; font-weight:bold;">${t.message || 'システム情報'}</td>`;
-                if(t.side === 'SYSTEM READY') document.getElementById('system-status').innerHTML = "✅ システム全稼働中";
-                return;
-            }
+				if (currentSub) currentSub.unsubscribe();
+				currentSub = stompClient.subscribe(`/topic/${sym}_${tf}`, (msg) => {
+					const d = JSON.parse(msg.body);
+					const time = d.currentCandle.time;
+					candleSeries.update(d.currentCandle);
+					if (d.currentMa5 > 0) ma5Series.update({time, value: d.currentMa5});
+					if (d.currentMa10 > 0) ma10Series.update({time, value: d.currentMa10});
+					if (d.currentMa25 > 0) ma25Series.update({time, value: d.currentMa25});
+					if (d.currentMa50 > 0) ma50Series.update({time, value: d.currentMa50});
+					if (d.currentMa75 > 0) ma75Series.update({time, value: d.currentMa75});
+					if (d.currentMa100 > 0) ma100Series.update({time, value: d.currentMa100});
+					// デバッグ用: 受信したらコンソールに表示
+					console.log(`[${sym}_${tf}] Tick受信: ${d.currentCandle.close}`);
+				});
+				loadSettings();
+			} catch (e) {console.error("チャート取得エラー", e);}
+		}
 
-            let pnl = 0, pnlText = '-', totalAmt = '-';
-            const key = t.symbol + t.timeframe;
+		document.getElementById('loadBtn').onclick = loadChartData;
+		document.getElementById('symbolSelect').onchange = loadSettings;
 
-            if(t.side !== 'INFO') {
-                totalAmt = Math.floor(t.price * t.size).toLocaleString() + ' JPY';
-                if(t.side === 'BUY') lastBuyPrices[key] = t.price;
-                else if(t.side === 'SELL' && lastBuyPrices[key]) {
-                    pnl = Math.floor((t.price - lastBuyPrices[key]) * t.size);
-                    totalPnl += pnl;
-                    document.getElementById('total-pnl').innerText = totalPnl.toLocaleString();
-                    lastBuyPrices[key] = 0;
-                    pnlText = pnl > 0 ? '+'+pnl.toLocaleString() : pnl.toLocaleString();
-                }
-            }
-            row.innerHTML = `<td>${new Date(t.time * 1000).toLocaleTimeString()}</td><td><b>${t.symbol}</b></td><td>${t.timeframe}</td><td class="${t.side === 'BUY' ? 'buy' : 'sell'}">${t.side}</td><td>${t.price>0?t.price.toLocaleString():'-'}</td><td>${t.size}</td><td>${totalAmt}</td><td class="${pnl>=0?'buy':'sell'}">${pnlText}</td>`;
-        }
+		async function fetchHistory() {
+			try {
+				const res = await fetch('/api/trades/history');
+				const trades = await res.json();
+				document.getElementById('trade-history').tBodies[0].innerHTML = '';
+				totalPnl = 0; lastBuyPrices = {};
+				trades.reverse().forEach(addTradeRow);
+			} catch (e) {console.error(e);}
+		}
 
-        function connect() {
-            stompClient = Stomp.over(new SockJS('/ws-market-data'));
-            stompClient.debug = null;
-            stompClient.connect({}, () => {
-                loadChartData();
-                fetchHistory();
-                stompClient.subscribe('/topic/trades', (msg) => addTradeRow(JSON.parse(msg.body)));
-            }, () => setTimeout(connect, 5000));
-        }
+		function addTradeRow(t) {
+			const tbody = document.getElementById('trade-history').tBodies[0];
+			const row = tbody.insertRow(0);
 
-        connect();
-    </script>
+			if (t.side === 'SYSTEM BOOTING' || t.side === 'SYSTEM READY' || t.side === 'INFO') {
+				row.innerHTML = `<td>${new Date(t.time * 1000).toLocaleTimeString()}</td><td colspan="7" style="color:#2962ff; font-weight:bold;">${t.message || 'システム情報'}</td>`;
+				if (t.side === 'SYSTEM READY') document.getElementById('system-status').innerHTML = "✅ システム全稼働中";
+				return;
+			}
+
+			let pnl = 0, pnlText = '-', totalAmt = '-';
+			const key = t.symbol + t.timeframe;
+
+			if (t.side !== 'INFO') {
+				totalAmt = Math.floor(t.price * t.size).toLocaleString() + ' JPY';
+				if (t.side === 'BUY') lastBuyPrices[key] = t.price;
+				else if (t.side === 'SELL' && lastBuyPrices[key]) {
+					pnl = Math.floor((t.price - lastBuyPrices[key]) * t.size);
+					totalPnl += pnl;
+					document.getElementById('total-pnl').innerText = totalPnl.toLocaleString();
+					lastBuyPrices[key] = 0;
+					pnlText = pnl > 0 ? '+' + pnl.toLocaleString() : pnl.toLocaleString();
+				}
+			}
+			row.innerHTML = `<td>${new Date(t.time * 1000).toLocaleTimeString()}</td><td><b>${t.symbol}</b></td><td>${t.timeframe}</td><td class="${t.side === 'BUY' ? 'buy' : 'sell'}">${t.side}</td><td>${t.price > 0 ? t.price.toLocaleString() : '-'}</td><td>${t.size}</td><td>${totalAmt}</td><td class="${pnl >= 0 ? 'buy' : 'sell'}">${pnlText}</td>`;
+		}
+
+		function connect() {
+			stompClient = Stomp.over(new SockJS('/ws-market-data'));
+			stompClient.debug = null;
+			stompClient.connect({}, () => {
+				loadChartData();
+				fetchHistory();
+				stompClient.subscribe('/topic/trades', (msg) => addTradeRow(JSON.parse(msg.body)));
+			}, () => setTimeout(connect, 5000));
+		}
+
+		connect();
+	</script>
 </body>
+
 </html>
