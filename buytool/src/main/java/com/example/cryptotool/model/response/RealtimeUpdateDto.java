@@ -11,6 +11,7 @@ public class RealtimeUpdateDto {
     private double currentMa10;
     private double currentMa25;
     private double currentMa50;
+    private double currentMa75;
     private double currentMa100;
     private SignalType signal; // BUY, SELL, NONE
 

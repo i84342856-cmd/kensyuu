@@ -17,6 +17,7 @@ public class ChartInitResponse {
     private List<MovingAverageData> ma10;
     private List<MovingAverageData> ma25;
     private List<MovingAverageData> ma50;
+    private List<MovingAverageData> ma75;
     private List<MovingAverageData> ma100;
 
     @Data
