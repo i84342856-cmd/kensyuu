@@ -67,11 +67,19 @@
         const select = document.getElementById("symbolSelect");
         symbols.forEach(s => select.add(new Option(s, s)));
 
-        const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
-            layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
-            grid: { vertLines: { color: '#2b313f' }, horzLines: { color: '#2b313f' } },
-            timeScale: { timeVisible: true }
-        });
+		const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
+		    layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
+		    grid: { vertLines: { color: '#2b313f' }, horzLines: { color: '#2b313f' } },
+		    timeScale: { 
+		        timeVisible: true,        // 時間を表示
+		        secondsVisible: false,    // 秒の表示を消してスッキリさせる
+		        rightOffset: 15           // 右端に少し余白を作って見切れを防ぐ
+		    },
+		    localization: {
+		        locale: 'ja-JP',          // 日本のロケールを指定
+		        dateFormat: 'yyyy/MM/dd', // 日付フォーマットを見やすく
+		    }
+		});
         
         const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false });
         const ma5Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 2 });

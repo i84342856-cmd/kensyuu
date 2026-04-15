@@ -57,7 +57,7 @@ public class MarketDataServiceImpl implements MarketDataService {
                 for (Symbol s : Symbol.values()) {
                     for (TimeFrame tf : TimeFrame.values()) {
                         String key = s.name() + "_" + tf.name();
-                        List<CandleData> fetched = cryptoCompareClient.getHistoricalCandles(s, tf, 100);
+                        List<CandleData> fetched = cryptoCompareClient.getHistoricalCandles(s, tf, 1000);
                         historyMap.put(key, fetched);
                         if (!fetched.isEmpty()) currentCandleMap.put(key, fetched.get(fetched.size() - 1));
                         
