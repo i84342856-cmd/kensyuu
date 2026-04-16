@@ -10,8 +10,10 @@ import com.example.cryptotool.model.enums.Symbol;
 import com.example.cryptotool.model.enums.TimeFrame;
 import com.example.cryptotool.model.response.ChartInitResponse.CandleData;
 
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.JsonNode;
 
+@Slf4j
 @Component
 public class CryptoCompareClient {
 
@@ -64,7 +66,8 @@ public class CryptoCompareClient {
             }
             return candles;
         } catch (Exception e) {
-            // 一部のマイナー通貨はAPIにデータがない場合があるので空リストを返す
+            // 万が一データが取れなかった場合はコンソールに赤い文字で詳細な原因を出力します
+            log.error("❌ [CryptoCompare API Error] {} {}足の過去データ取得に失敗: {}", fsym, timeFrame, e.getMessage());
             return new ArrayList<>();
         }
     }
