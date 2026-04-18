@@ -58,6 +58,10 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private final double MIN_SLOPE_THRESHOLD = 0.0003;
 	private final double NEARBY_MA_THRESHOLD = 0.005;
 	private final double PO_WIDEN_THRESHOLD = 0.002;
+	
+	// 追加: 新戦略用の閾値
+	private final double SQUEEZE_THRESHOLD = 0.001; // MA収束判定（0.1%）
+	private final double DEVIATION_THRESHOLD = 0.01; // MA乖離判定（1.0%）
 
 	@PostConstruct
 	public void init() {
@@ -182,8 +186,6 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private SignalDecision checkSignal(TimeFrame tf, String key, CandleData current) {
 		if (current == null) return null;
 		
-		// ("M1".equals(tf.name())) return null;
-
 		String currentPosition = positionMap.getOrDefault(key, "NONE");
 
 		if ("NONE".equals(currentPosition)) {
@@ -234,13 +236,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 		// 【戦略2改】
 		boolean poUpShort = (ma5 > ma10) && (ma10 > ma25);
 		boolean poUpLong = (ma25 > ma50) && (ma50 > ma75);
-		boolean isMa25Up001 = isSlopeGreaterThanOrEqual(ma25, ma25Prev, 0.0001); // 0.01%以上の傾き
-		boolean isMa50Pos = isSlopePositive(ma50, ma50Prev); // slope > 0
-		boolean isMa75Pos = isSlopePositive(ma75, ma75Prev); // slope > 0
+		boolean isMa25Up001 = isSlopeGreaterThanOrEqual(ma25, ma25Prev, 0.0001); 
+		boolean isMa50Pos = isSlopePositive(ma50, ma50Prev); 
+		boolean isMa75Pos = isSlopePositive(ma75, ma75Prev); 
 		
 		double ma5_2 = getPastMA(key, 5, 2);
 		double ma10_2 = getPastMA(key, 10, 2);
-		boolean narrowBeforeUp = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.001; // 2本前は0.1%以内の乖離
+		boolean narrowBeforeUp = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.001; 
 		boolean widenUp = ((ma5 - ma10) / ma10) >= PO_WIDEN_THRESHOLD;
 
 		if (poUpShort && poUpLong && isMa5Up && isMa10Up && isMa25Up001 && isMa50Pos && isMa75Pos && narrowBeforeUp && widenUp) {
@@ -249,13 +251,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 		// 【戦略3改】
 		boolean isMa5Down = isDownwardTrend(ma5, ma5Prev);
-		boolean shortTermDown = (ma5 < ma10) && isMa5Down; // 短期は明確に調整下落中であること
+		boolean shortTermDown = (ma5 < ma10) && isMa5Down; 
 
 		// 75MA反発ルート
 		boolean touch75FromAbove = (current.getLow() <= ma75) && (current.getClose() >= ma75); 
 		boolean rebound75 = isMa75Up && isMa100Up && touch75FromAbove;
 
-		// 50MA反発ルート (50MAのスロープが0.15%以上)
+		// 50MA反発ルート 
 		boolean isMa50UpSteep = isSlopeGreaterThanOrEqual(ma50, ma50Prev, 0.0015);
 		boolean touch50FromAbove = (current.getLow() <= ma50) && (current.getClose() >= ma50);
 		boolean rebound50 = isMa50UpSteep && isMa75Up && isMa100Up && touch50FromAbove;
@@ -323,13 +325,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 		// 【戦略2改】
 		boolean poDownShort = (ma5 < ma10) && (ma10 < ma25);
 		boolean poDownLong = (ma25 < ma50) && (ma50 < ma75);
-		boolean isMa25Down001 = isSlopeLessThanOrEqual(ma25, ma25Prev, -0.0001); // -0.01%以下の傾き
-		boolean isMa50Neg = isSlopeNegative(ma50, ma50Prev); // slope < 0
-		boolean isMa75Neg = isSlopeNegative(ma75, ma75Prev); // slope < 0
+		boolean isMa25Down001 = isSlopeLessThanOrEqual(ma25, ma25Prev, -0.0001); 
+		boolean isMa50Neg = isSlopeNegative(ma50, ma50Prev); 
+		boolean isMa75Neg = isSlopeNegative(ma75, ma75Prev); 
 
 		double ma5_2 = getPastMA(key, 5, 2);
 		double ma10_2 = getPastMA(key, 10, 2);
-		boolean narrowBeforeDown = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.001; // 2本前は0.1%以内の乖離
+		boolean narrowBeforeDown = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.001; 
 		boolean widenDown = ((ma10 - ma5) / ma10) >= PO_WIDEN_THRESHOLD; 
 
 		if (poDownShort && poDownLong && isMa5Down && isMa10Down && isMa25Down001 && isMa50Neg && isMa75Neg && narrowBeforeDown && widenDown) {
@@ -337,13 +339,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 		}
 
 		// 【戦略3改】
-		boolean shortTermUp = (ma5 > ma10) && isMa5Up; // 短期は明確に調整上昇中であること
+		boolean shortTermUp = (ma5 > ma10) && isMa5Up; 
 
 		// 75MA反発ルート
 		boolean touch75FromBelow = (current.getHigh() >= ma75) && (current.getClose() <= ma75);
 		boolean rebound75 = isMa75Down && isMa100Down && touch75FromBelow;
 
-		// 50MA反発ルート (50MAのスロープが-0.15%以下)
+		// 50MA反発ルート 
 		boolean isMa50DownSteep = isSlopeLessThanOrEqual(ma50, ma50Prev, -0.0015);
 		boolean touch50FromBelow = (current.getHigh() >= ma50) && (current.getClose() <= ma50);
 		boolean rebound50 = isMa50DownSteep && isMa75Down && isMa100Down && touch50FromBelow;
@@ -409,6 +411,23 @@ public class MarketDataServiceImpl implements MarketDataService {
 			}
 		}
 
+		// 【追加戦略7】スクイーズからの下抜けブレイク（足の途中・Tick判定）
+		double c_2 = getPastCandleClose(key, 2);
+		double low_1 = getPastCandleLow(key, 1);
+		double realTimePrice = current.getClose();
+
+		boolean isSqueezed = c_2 > 0 && (Math.abs(getPastMA(key, 25, 2) - getPastMA(key, 5, 2)) / c_2) < SQUEEZE_THRESHOLD;
+		boolean isPoDownNow = (ma25 > ma10) && (ma10 > ma5);
+		boolean isMomentumDown = (ma5 < ma5Prev) && (ma10 < ma10Prev);
+		
+		boolean isRealTimeBearish = realTimePrice < current.getOpen();
+		boolean isBelowMa5 = realTimePrice < ma5;
+		boolean isBreakLow = realTimePrice < low_1;
+
+		if (isSqueezed && isPoDownNow && isMomentumDown && isRealTimeBearish && isBelowMa5 && isBreakLow) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 7, "スクイーズ下抜けブレイク(Tick判定)");
+		}
+
 		return null;
 	}
 
@@ -445,6 +464,28 @@ public class MarketDataServiceImpl implements MarketDataService {
 		int strategyId = entryStrategyMap.getOrDefault(key, 1);
 		long entryTime = entryCandleTimeMap.getOrDefault(key, 0L);
 		long candleSeconds = tf.getSeconds();
+
+		// 【追加】戦略7専用のリアルタイム・イグジットロジック
+		if (strategyId == 7) {
+			double ma5_now = getPastMA(key, 5, 0);
+			double ma5_prev = getPastMA(key, 5, 1);
+			double ma10_now = getPastMA(key, 10, 0);
+			double ma25_now = getPastMA(key, 25, 0);
+			double currentPrice = current.getClose();
+
+			if (currentPrice > ma10_now) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 7, "トレンド否定(10MA上抜け損切り)");
+			}
+			if (ma5_now >= ma5_prev || currentPrice > ma5_now) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 7, "モメンタム低下(5MA反転/上抜け利確)");
+			}
+			double deviation = (ma25_now - currentPrice) / ma25_now;
+			boolean hasLowerShadow = currentPrice >= current.getOpen() || 
+									 (current.getOpen() - currentPrice) < (currentPrice - current.getLow());
+			if (deviation > DEVIATION_THRESHOLD && hasLowerShadow) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 7, "25MA下方乖離+下ヒゲ(早期利確)");
+			}
+		}
 
 		if ((strategyId == 2 || strategyId == 4) && current.getTime() >= entryTime + (3 * candleSeconds)) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "時間経過強制決済(3本目)");
@@ -512,14 +553,17 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 	private void executeTrade(Symbol symbol, TimeFrame tf, SignalDecision decision, CandleData candle) {
 		String key = symbol.name() + "_" + tf.name();
-		if (lastOrderTimeMap.get(key).equals(candle.getTime())) return; 
-		
 		String currentPos = positionMap.getOrDefault(key, "NONE");
+		
+		// 修正: 新規エントリー時のみ同足連打を防止し、決済判定はスルーする
+		boolean isNewEntry = "NONE".equals(currentPos);
+		if (isNewEntry && lastOrderTimeMap.get(key).equals(candle.getTime())) return; 
+		
 		String newPos = currentPos;
 		String actionType = "";
 		double tradeSize = 0.001;
 
-		if ("NONE".equals(currentPos)) {
+		if (isNewEntry) {
 			tradeSize = calculateLotSize(candle.getClose());
 			
 			if (decision.getType() == RealtimeUpdateDto.SignalType.BUY) {
@@ -551,7 +595,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 		logTrade.put("price", candle.getClose());
 		logTrade.put("size", tradeSize); 
 		logTrade.put("message", actionType); 
-
+		
+		logTrade.put("strategy", decision.getStrategyId());
+		
 		tradeHistoryList.add(0, logTrade);
 		messagingTemplate.convertAndSend("/topic/trades", (Object) logTrade);
 
@@ -605,13 +651,12 @@ public class MarketDataServiceImpl implements MarketDataService {
 		m.put("price", 0.0);
 		m.put("size", 0.0);
 		m.put("message", message);
+		
+		m.put("strategy", 0);
+		
 		tradeHistoryList.add(0, m);
 		messagingTemplate.convertAndSend("/topic/trades", (Object) m);
 	}
-
-	// =========================================================
-	// 🆕 追加補助メソッド：傾き・高値・安値・包み線判定
-	// =========================================================
 
 	private boolean isSlopePositive(double currentMa, double prevMa) {
 		if (prevMa <= 0) return false;
@@ -630,7 +675,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 	private boolean isSlopeLessThanOrEqual(double currentMa, double prevMa, double threshold) {
 		if (prevMa <= 0) return false;
-		return ((currentMa - prevMa) / prevMa) <= threshold; // thresholdには負の値を渡す
+		return ((currentMa - prevMa) / prevMa) <= threshold; 
 	}
 
 	private double getHighestHigh(String key, int period, int barsAgo) {
@@ -665,12 +710,23 @@ public class MarketDataServiceImpl implements MarketDataService {
 		boolean isCurrentBearish = current.getClose() < current.getOpen();
 		boolean isC1Bearish = c1.getClose() < c1.getOpen();
 		
-		// パターン1: 1本の陰線(current)が、直近の上昇(c1, c2)を打ち消す（c2の始値より低く終わる）
 		boolean swallow1 = isCurrentBearish && (current.getClose() < Math.min(c2.getOpen(), c2.getClose()));
-		
-		// パターン2: 2本の陰線(current, c1)が、その前の上昇(c2, c3)を打ち消す（c3の始値より低く終わる）
 		boolean swallow2 = isCurrentBearish && isC1Bearish && (current.getClose() < Math.min(c3.getOpen(), c3.getClose()));
 		
 		return swallow1 || swallow2;
+	}
+
+	// 追加: 過去足の終値取得
+	private double getPastCandleClose(String key, int barsAgo) {
+		List<CandleData> hist = historyMap.get(key);
+		if (hist == null || hist.size() < barsAgo) return 0.0;
+		return hist.get(hist.size() - barsAgo).getClose();
+	}
+
+	// 追加: 過去足の安値取得
+	private double getPastCandleLow(String key, int barsAgo) {
+		List<CandleData> hist = historyMap.get(key);
+		if (hist == null || hist.size() < barsAgo) return 0.0;
+		return hist.get(hist.size() - barsAgo).getLow();
 	}
 }
