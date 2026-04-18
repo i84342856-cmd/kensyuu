@@ -182,7 +182,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private SignalDecision checkSignal(TimeFrame tf, String key, CandleData current) {
 		if (current == null) return null;
 		
-		//if ("M1".equals(tf.name())) return null;
+		// ("M1".equals(tf.name())) return null;
 
 		String currentPosition = positionMap.getOrDefault(key, "NONE");
 
@@ -210,7 +210,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double ma75 = getPastMA(key, 75, 0), ma75Prev = getPastMA(key, 75, 1);
 		double ma100 = getPastMA(key, 100, 0), ma100Prev = getPastMA(key, 100, 1);
 
-		if (ma5 == 0 || ma75Prev == 0) return null;
+		if (ma5 == 0 || ma100Prev == 0) return null;
 
 		boolean isMa5Up = isUpwardTrend(ma5, ma5Prev);
 		boolean isMa10Up = isUpwardTrend(ma10, ma10Prev);
@@ -220,6 +220,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		boolean isMa75Up = isUpwardTrend(ma75, ma75Prev);
 		boolean isMa100Up = isUpwardTrend(ma100, ma100Prev);
 
+		// 【戦略1】
 		boolean cross10 = (ma5Prev <= ma10Prev) && (ma5 > ma10);
 		if (cross10 && isMa5Up && isMa10Up && isMa25Up) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 1, "GC(5&10) + 25MA同調");
@@ -230,19 +231,37 @@ public class MarketDataServiceImpl implements MarketDataService {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 1, "GC(5&25) + 50MAレジスタンス回避");
 		}
 
-		boolean poUp = (ma5 > ma10) && (ma10 > ma25) && isMa5Up && isMa10Up && isMa25Up;
+		// 【戦略2改】
+		boolean poUpShort = (ma5 > ma10) && (ma10 > ma25);
+		boolean poUpLong = (ma25 > ma50) && (ma50 > ma75);
+		boolean isMa25Up001 = isSlopeGreaterThanOrEqual(ma25, ma25Prev, 0.0001); // 0.01%以上の傾き
+		boolean isMa50Pos = isSlopePositive(ma50, ma50Prev); // slope > 0
+		boolean isMa75Pos = isSlopePositive(ma75, ma75Prev); // slope > 0
+		
+		double ma5_2 = getPastMA(key, 5, 2);
+		double ma10_2 = getPastMA(key, 10, 2);
+		boolean narrowBeforeUp = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.001; // 2本前は0.1%以内の乖離
 		boolean widenUp = ((ma5 - ma10) / ma10) >= PO_WIDEN_THRESHOLD;
-		if (poUp && widenUp) {
-			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 2, "PO上昇中 + 角度急拡大(モメンタム)");
+
+		if (poUpShort && poUpLong && isMa5Up && isMa10Up && isMa25Up001 && isMa50Pos && isMa75Pos && narrowBeforeUp && widenUp) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 2, "PO上昇中 + 初動急拡大(スクイーズからの解放)");
 		}
 
+		// 【戦略3改】
 		boolean isMa5Down = isDownwardTrend(ma5, ma5Prev);
-		boolean isMa10Down = isDownwardTrend(ma10, ma10Prev);
-		boolean isMa25Down = isDownwardTrend(ma25, ma25Prev);
-		boolean poDown = (ma5 < ma10) && (ma10 < ma25) && isMa5Down && isMa10Down && isMa25Down;
+		boolean shortTermDown = (ma5 < ma10) && isMa5Down; // 短期は明確に調整下落中であること
+
+		// 75MA反発ルート
 		boolean touch75FromAbove = (current.getLow() <= ma75) && (current.getClose() >= ma75); 
-		if (poDown && isMa75Up && touch75FromAbove) {
-			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 3, "75MA(上向き) サポート反発狙い");
+		boolean rebound75 = isMa75Up && isMa100Up && touch75FromAbove;
+
+		// 50MA反発ルート (50MAのスロープが0.15%以上)
+		boolean isMa50UpSteep = isSlopeGreaterThanOrEqual(ma50, ma50Prev, 0.0015);
+		boolean touch50FromAbove = (current.getLow() <= ma50) && (current.getClose() >= ma50);
+		boolean rebound50 = isMa50UpSteep && isMa75Up && isMa100Up && touch50FromAbove;
+
+		if (shortTermDown && (rebound75 || rebound50)) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 3, rebound50 ? "50MA(急上昇) サポート反発" : "75MA(上昇) サポート反発");
 		}
 
 		// 【追加戦略4】買い
@@ -258,8 +277,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 				}
 			}
 			if (approached && isMa5Up) {
-				double highest10 = getHighestHigh(key, 10, 1);
-				if (current.getClose() > highest10) {
+				double highest6 = getHighestHigh(key, 6, 1);
+				if (current.getClose() > highest6) {
 					return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 4, "PO(5以外) + 10MA接近反発 + 高値更新");
 				}
 			}
@@ -276,7 +295,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double ma75 = getPastMA(key, 75, 0), ma75Prev = getPastMA(key, 75, 1);
 		double ma100 = getPastMA(key, 100, 0), ma100Prev = getPastMA(key, 100, 1);
 
-		if (ma5 == 0 || ma75Prev == 0) return null;
+		if (ma5 == 0 || ma100Prev == 0) return null;
 
 		boolean isMa5Down = isDownwardTrend(ma5, ma5Prev);
 		boolean isMa10Down = isDownwardTrend(ma10, ma10Prev);
@@ -290,6 +309,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		boolean isMa25Up = isUpwardTrend(ma25, ma25Prev);
 		boolean isMa50Up = isUpwardTrend(ma50, ma50Prev);
 
+		// 【戦略1】
 		boolean cross10 = (ma5Prev >= ma10Prev) && (ma5 < ma10);
 		if (cross10 && isMa5Down && isMa10Down && isMa25Down) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 1, "DC(5&10) + 25MA同調");
@@ -300,16 +320,36 @@ public class MarketDataServiceImpl implements MarketDataService {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 1, "DC(5&25) + 50MAサポート回避");
 		}
 
-		boolean poDown = (ma5 < ma10) && (ma10 < ma25) && isMa5Down && isMa10Down && isMa25Down;
+		// 【戦略2改】
+		boolean poDownShort = (ma5 < ma10) && (ma10 < ma25);
+		boolean poDownLong = (ma25 < ma50) && (ma50 < ma75);
+		boolean isMa25Down001 = isSlopeLessThanOrEqual(ma25, ma25Prev, -0.0001); // -0.01%以下の傾き
+		boolean isMa50Neg = isSlopeNegative(ma50, ma50Prev); // slope < 0
+		boolean isMa75Neg = isSlopeNegative(ma75, ma75Prev); // slope < 0
+
+		double ma5_2 = getPastMA(key, 5, 2);
+		double ma10_2 = getPastMA(key, 10, 2);
+		boolean narrowBeforeDown = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.001; // 2本前は0.1%以内の乖離
 		boolean widenDown = ((ma10 - ma5) / ma10) >= PO_WIDEN_THRESHOLD; 
-		if (poDown && widenDown) {
-			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 2, "PO下降中 + 角度急拡大(モメンタム)");
+
+		if (poDownShort && poDownLong && isMa5Down && isMa10Down && isMa25Down001 && isMa50Neg && isMa75Neg && narrowBeforeDown && widenDown) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 2, "PO下降中 + 初動急拡大(スクイーズからの解放)");
 		}
 
-		boolean poUp = (ma5 > ma10) && (ma10 > ma25) && isMa5Up && isMa10Up && isMa25Up;
+		// 【戦略3改】
+		boolean shortTermUp = (ma5 > ma10) && isMa5Up; // 短期は明確に調整上昇中であること
+
+		// 75MA反発ルート
 		boolean touch75FromBelow = (current.getHigh() >= ma75) && (current.getClose() <= ma75);
-		if (poUp && isMa75Down && touch75FromBelow) {
-			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 3, "75MA(下向き) レジスタンス反発狙い");
+		boolean rebound75 = isMa75Down && isMa100Down && touch75FromBelow;
+
+		// 50MA反発ルート (50MAのスロープが-0.15%以下)
+		boolean isMa50DownSteep = isSlopeLessThanOrEqual(ma50, ma50Prev, -0.0015);
+		boolean touch50FromBelow = (current.getHigh() >= ma50) && (current.getClose() <= ma50);
+		boolean rebound50 = isMa50DownSteep && isMa75Down && isMa100Down && touch50FromBelow;
+
+		if (shortTermUp && (rebound75 || rebound50)) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 3, rebound50 ? "50MA(急下降) レジスタンス反発" : "75MA(下降) レジスタンス反発");
 		}
 
 		// 【追加戦略4】売り
@@ -325,8 +365,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 				}
 			}
 			if (approached && isMa5Down) {
-				double lowest10 = getLowestLow(key, 10, 1);
-				if (current.getClose() < lowest10) {
+				double lowest6 = getLowestLow(key, 6, 1);
+				if (current.getClose() < lowest6) {
 					return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 4, "PO(5以外) + 10MA接近反発 + 安値更新");
 				}
 			}
@@ -570,8 +610,28 @@ public class MarketDataServiceImpl implements MarketDataService {
 	}
 
 	// =========================================================
-	// 🆕 追加補助メソッド：高値・安値・包み線判定
+	// 🆕 追加補助メソッド：傾き・高値・安値・包み線判定
 	// =========================================================
+
+	private boolean isSlopePositive(double currentMa, double prevMa) {
+		if (prevMa <= 0) return false;
+		return currentMa > prevMa;
+	}
+
+	private boolean isSlopeNegative(double currentMa, double prevMa) {
+		if (prevMa <= 0) return false;
+		return currentMa < prevMa;
+	}
+
+	private boolean isSlopeGreaterThanOrEqual(double currentMa, double prevMa, double threshold) {
+		if (prevMa <= 0) return false;
+		return ((currentMa - prevMa) / prevMa) >= threshold;
+	}
+
+	private boolean isSlopeLessThanOrEqual(double currentMa, double prevMa, double threshold) {
+		if (prevMa <= 0) return false;
+		return ((currentMa - prevMa) / prevMa) <= threshold; // thresholdには負の値を渡す
+	}
 
 	private double getHighestHigh(String key, int period, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key);
