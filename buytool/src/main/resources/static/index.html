@@ -62,7 +62,6 @@
 			font-weight: bold;
 		}
 
-		/* 凡例（レジェンド）用のスタイル */
 		.chart-legend {
 			display: flex;
 			flex-wrap: wrap;
@@ -137,6 +136,18 @@
 		.batch-btn:hover {
 			background: #00e676;
 		}
+
+		/* 戦略バッジ用のスタイル追加 */
+		.strategy-badge {
+			background: #37474f;
+			color: #fff;
+			padding: 3px 6px;
+			border-radius: 4px;
+			font-size: 11px;
+			font-weight: bold;
+			display: inline-block;
+			margin-bottom: 2px;
+		}
 	</style>
 </head>
 
@@ -176,11 +187,11 @@
 				<table id="trade-history">
 					<thead>
 						<tr>
-							<th>時刻</th>
+							<th>日時 (JST)</th>
 							<th>通貨</th>
 							<th>足</th>
 							<th>売買</th>
-							<th>価格</th>
+							<th>戦略・根拠</th> <th>価格</th>
 							<th>数量</th>
 							<th>約定金額</th>
 							<th>損益</th>
@@ -207,7 +218,8 @@
 		const select = document.getElementById("symbolSelect");
 		symbols.forEach(s => select.add(new Option(s, s)));
 
-		// 1. まずchartを作成する
+		const JST_OFFSET = 9 * 60 * 60; 
+
 		const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
 			autoSize: true, 
 			layout: {background: {color: '#1e222d'}, textColor: '#d1d4dc'},
@@ -223,197 +235,213 @@
 			}
 		});
 
-		// 2. その後でシリーズを追加する
 		const candleSeries = chart.addCandlestickSeries({upColor: '#26a69a', downColor: '#ef5350', borderVisible: false});
-		const ma5Series = chart.addLineSeries({color: '#2962ff', lineWidth: 2});   // 青
-		const ma10Series = chart.addLineSeries({color: '#4caf50', lineWidth: 1});  // 緑
-		const ma25Series = chart.addLineSeries({color: '#ff1744', lineWidth: 1});  // 赤
-		const ma50Series = chart.addLineSeries({color: '#ffeb3b', lineWidth: 1});  // 黄
-		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  // オレンジ
-		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); // 紫
+		const ma5Series = chart.addLineSeries({color: '#2962ff', lineWidth: 2});   
+		const ma10Series = chart.addLineSeries({color: '#4caf50', lineWidth: 1});  
+		const ma25Series = chart.addLineSeries({color: '#ff1744', lineWidth: 1});  
+		const ma50Series = chart.addLineSeries({color: '#ffeb3b', lineWidth: 1});  
+		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  
+		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); 
 
 		let stompClient = null;
-				let currentSub = null;
-				let totalPnl = 0;
-				// ★変更: 単なる lastBuyPrices ではなく、現在のポジション状態を管理するオブジェクトにする
-				let activePositions = {}; 
+		let currentSub = null;
+		let totalPnl = 0;
+		let activePositions = {}; 
 
-				function cleanData(arr) {
-					if (!arr || arr.length === 0) return [];
-					const map = new Map();
-					arr.forEach(item => {
-						if (item && item.time) {
-							map.set(item.time, item);
-						}
-					});
-					return Array.from(map.values()).sort((a, b) => a.time - b.time);
+		function cleanData(arr) {
+			if (!arr || arr.length === 0) return [];
+			const map = new Map();
+			arr.forEach(item => {
+				if (item && item.time) {
+					map.set(item.time, { ...item, time: item.time + JST_OFFSET });
 				}
+			});
+			return Array.from(map.values()).sort((a, b) => a.time - b.time);
+		}
 
-				async function loadSettings() {
-					const res = await fetch('/api/settings/monitor');
-					const settings = await res.json();
+		async function loadSettings() {
+			const res = await fetch('/api/settings/monitor');
+			const settings = await res.json();
 
-					const container = document.getElementById('monitor-settings');
-					container.innerHTML = '';
-					const curSym = select.value;
-					timeframes.forEach(tf => {
-						const key = curSym + "_" + tf;
-						const active = settings[key] || false;
-						const div = document.createElement('div');
-						div.className = 'setting-item';
-						div.innerHTML = `<span><b>${tf}</b> 監視</span><input type="checkbox" ${active ? 'checked' : ''} onchange="toggleSetting('${curSym}','${tf}',this.checked)">`;
-						container.appendChild(div);
-					});
+			const container = document.getElementById('monitor-settings');
+			container.innerHTML = '';
+			const curSym = select.value;
+			timeframes.forEach(tf => {
+				const key = curSym + "_" + tf;
+				const active = settings[key] || false;
+				const div = document.createElement('div');
+				div.className = 'setting-item';
+				div.innerHTML = `<span><b>${tf}</b> 監視</span><input type="checkbox" ${active ? 'checked' : ''} onchange="toggleSetting('${curSym}','${tf}',this.checked)">`;
+				container.appendChild(div);
+			});
 
-					const activeBotsContainer = document.getElementById('active-bots-list');
-					activeBotsContainer.innerHTML = '';
-					let activeCount = 0;
-					for (const [key, isActive] of Object.entries(settings)) {
-						if (isActive) {
-							activeCount++;
-							const parts = key.split('_');
-							const tf = parts.pop();
-							const sym = parts.join('_');
-							activeBotsContainer.innerHTML += `<div style="margin-bottom:5px;">✅ <b>${sym}</b> (${tf}足)</div>`;
-						}
-					}
-					if (activeCount === 0) activeBotsContainer.innerHTML = '<span style="color:#aaa;">現在稼働しているBotはありません</span>';
+			const activeBotsContainer = document.getElementById('active-bots-list');
+			activeBotsContainer.innerHTML = '';
+			let activeCount = 0;
+			for (const [key, isActive] of Object.entries(settings)) {
+				if (isActive) {
+					activeCount++;
+					const parts = key.split('_');
+					const tf = parts.pop();
+					const sym = parts.join('_');
+					activeBotsContainer.innerHTML += `<div style="margin-bottom:5px;">✅ <b>${sym}</b> (${tf}足)</div>`;
 				}
+			}
+			if (activeCount === 0) activeBotsContainer.innerHTML = '<span style="color:#aaa;">現在稼働しているBotはありません</span>';
+		}
 
-				async function toggleSetting(sym, tf, active) {
-					await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${active}`, {method: 'POST'});
-					loadSettings();
-				}
+		async function toggleSetting(sym, tf, active) {
+			await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${active}`, {method: 'POST'});
+			loadSettings();
+		}
 
-				document.getElementById('enableAllBtn').onclick = async () => {
-					const btn = document.getElementById('enableAllBtn');
-					btn.innerText = "🔄 起動中...";
-					const targetTimeframes = ["M1", "M5", "M15", "M30"];
-					for (const tf of targetTimeframes) {
-						await fetch(`/api/settings/monitor/all?timeframe=${tf}`, {method: 'POST'});
-					}
-					btn.innerText = "🔥 全通貨の「1分/5分/15分/30分足」を一括ON";
-					loadSettings();
-				};
+		document.getElementById('enableAllBtn').onclick = async () => {
+			const btn = document.getElementById('enableAllBtn');
+			btn.innerText = "🔄 起動中...";
+			const targetTimeframes = ["M1", "M5", "M15", "M30"]; 
+			for (const tf of targetTimeframes) {
+				await fetch(`/api/settings/monitor/all?timeframe=${tf}`, {method: 'POST'});
+			}
+			btn.innerText = "🔥 全通貨の「1分/5分/15分/30分足」を一括ON";
+			loadSettings();
+		};
 
-				async function loadChartData() {
-					const sym = document.getElementById('symbolSelect').value;
-					const tf = document.getElementById('timeframeSelect').value;
-					try {
-						const res = await fetch(`/api/chart/init?symbol=${sym}&timeframe=${tf}`);
-						const data = await res.json();
-						candleSeries.setData(cleanData(data.candles));
-						ma5Series.setData(cleanData(data.ma5));
-						ma10Series.setData(cleanData(data.ma10)); 
-						ma25Series.setData(cleanData(data.ma25));
-						ma50Series.setData(cleanData(data.ma50)); 
-						ma75Series.setData(cleanData(data.ma75)); 
-						ma100Series.setData(cleanData(data.ma100)); 
+		async function loadChartData() {
+			const sym = document.getElementById('symbolSelect').value;
+			const tf = document.getElementById('timeframeSelect').value;
+			try {
+				const res = await fetch(`/api/chart/init?symbol=${sym}&timeframe=${tf}`);
+				const data = await res.json();
+				
+				candleSeries.setData(cleanData(data.candles));
+				ma5Series.setData(cleanData(data.ma5));
+				ma10Series.setData(cleanData(data.ma10)); 
+				ma25Series.setData(cleanData(data.ma25));
+				ma50Series.setData(cleanData(data.ma50)); 
+				ma75Series.setData(cleanData(data.ma75)); 
+				ma100Series.setData(cleanData(data.ma100)); 
 
-						if (currentSub) currentSub.unsubscribe();
-						currentSub = stompClient.subscribe(`/topic/${sym}_${tf}`, (msg) => {
-							const d = JSON.parse(msg.body);
-							const time = d.currentCandle.time;
-							candleSeries.update(d.currentCandle);
-							if (d.currentMa5 > 0) ma5Series.update({time, value: d.currentMa5});
-							if (d.currentMa10 > 0) ma10Series.update({time, value: d.currentMa10});
-							if (d.currentMa25 > 0) ma25Series.update({time, value: d.currentMa25});
-							if (d.currentMa50 > 0) ma50Series.update({time, value: d.currentMa50});
-							if (d.currentMa75 > 0) ma75Series.update({time, value: d.currentMa75});
-							if (d.currentMa100 > 0) ma100Series.update({time, value: d.currentMa100});
-						});
-						loadSettings();
-					} catch (e) {console.error("チャート取得エラー", e);}
-				}
-
-				document.getElementById('loadBtn').onclick = loadChartData;
-				document.getElementById('symbolSelect').onchange = () => { loadSettings(); loadChartData(); };
-				document.getElementById('timeframeSelect').onchange = () => { loadSettings(); loadChartData(); };
-
-				async function fetchHistory() {
-					try {
-						const res = await fetch('/api/trades/history');
-						const trades = await res.json();
-						document.getElementById('trade-history').tBodies[0].innerHTML = '';
-						totalPnl = 0; 
-						activePositions = {}; // 初期化
-						trades.reverse().forEach(addTradeRow);
-					} catch (e) {console.error(e);}
-				}
-
-				// ★大幅変更: LONG/SHORTの判別と損益計算ロジック
-				function addTradeRow(t) {
-					const tbody = document.getElementById('trade-history').tBodies[0];
-					const row = tbody.insertRow(0);
-
-					if (t.side === 'SYSTEM BOOTING' || t.side === 'SYSTEM READY' || t.side === 'INFO') {
-						row.innerHTML = `<td>${new Date(t.time * 1000).toLocaleTimeString()}</td><td colspan="7" style="color:#2962ff; font-weight:bold;">${t.message || 'システム情報'}</td>`;
-						if (t.side === 'SYSTEM READY') document.getElementById('system-status').innerHTML = "✅ システム全稼働中";
-						return;
-					}
-
-					let pnl = 0, pnlText = '-', totalAmt = '-';
-					const key = t.symbol + t.timeframe;
-					let actionHtml = '';
-
-					if (t.side !== 'INFO') {
-						totalAmt = Math.floor(t.price * t.size).toLocaleString() + ' JPY';
-						
-						let pos = activePositions[key];
-						
-						if (!pos) {
-							// 📌 ポジションを持っていない状態からのエントリー
-							if (t.side === 'BUY') {
-								activePositions[key] = { type: 'LONG', price: t.price };
-								actionHtml = '<span class="buy">LONG エントリー</span>';
-							} else if (t.side === 'SELL') {
-								activePositions[key] = { type: 'SHORT', price: t.price };
-								actionHtml = '<span class="sell">SHORT エントリー</span>';
-							}
-						} else {
-							// 📌 すでにポジションを持っている状態での決済
-							if (pos.type === 'LONG' && t.side === 'SELL') {
-								// 買いの決済 (売値 - 買値)
-								pnl = Math.floor((t.price - pos.price) * t.size);
-								activePositions[key] = null;
-								actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (LONG)</span>';
-							} else if (pos.type === 'SHORT' && t.side === 'BUY') {
-								// 空売りの決済 (売値 - 買戻し値) ★空売りは安く買い戻すとプラス
-								pnl = Math.floor((pos.price - t.price) * t.size); 
-								activePositions[key] = null;
-								actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (SHORT)</span>';
-							}
-
-							// 決済が発生した場合のみ損益を画面に反映
-							if (actionHtml.includes('決済')) {
-								totalPnl += pnl;
-								document.getElementById('total-pnl').innerText = totalPnl.toLocaleString();
-								pnlText = pnl > 0 ? '+' + pnl.toLocaleString() : pnl.toLocaleString();
-							}
-						}
-					}
+				if (currentSub) currentSub.unsubscribe();
+				
+				currentSub = stompClient.subscribe(`/topic/${sym}_${tf}`, (msg) => {
+					const d = JSON.parse(msg.body);
+					const jstTime = d.currentCandle.time + JST_OFFSET;
 					
-					row.innerHTML = `<td>${new Date(t.time * 1000).toLocaleTimeString()}</td>
-					                 <td><b>${t.symbol}</b></td>
-					                 <td>${t.timeframe}</td>
-					                 <td>${actionHtml}</td>
-					                 <td>${t.price > 0 ? t.price.toLocaleString() : '-'}</td>
-					                 <td>${t.size}</td>
-					                 <td>${totalAmt}</td>
-					                 <td class="${pnl >= 0 ? 'buy' : 'sell'}">${pnlText}</td>`;
-				}
+					candleSeries.update({ ...d.currentCandle, time: jstTime });
+					if (d.currentMa5 > 0) ma5Series.update({ time: jstTime, value: d.currentMa5 });
+					if (d.currentMa10 > 0) ma10Series.update({ time: jstTime, value: d.currentMa10 });
+					if (d.currentMa25 > 0) ma25Series.update({ time: jstTime, value: d.currentMa25 });
+					if (d.currentMa50 > 0) ma50Series.update({ time: jstTime, value: d.currentMa50 });
+					if (d.currentMa75 > 0) ma75Series.update({ time: jstTime, value: d.currentMa75 });
+					if (d.currentMa100 > 0) ma100Series.update({ time: jstTime, value: d.currentMa100 });
+				});
+				loadSettings();
+			} catch (e) {console.error("チャート取得エラー", e);}
+		}
 
-				function connect() {
-					stompClient = Stomp.over(new SockJS('/ws-market-data'));
-					stompClient.debug = null;
-					stompClient.connect({}, () => {
-						loadChartData();
-						fetchHistory();
-						stompClient.subscribe('/topic/trades', (msg) => addTradeRow(JSON.parse(msg.body)));
-					}, () => setTimeout(connect, 5000));
-				}
+		document.getElementById('loadBtn').onclick = loadChartData;
+		document.getElementById('symbolSelect').onchange = () => { loadSettings(); loadChartData(); };
+		document.getElementById('timeframeSelect').onchange = () => { loadSettings(); loadChartData(); };
 
-				connect();
+		async function fetchHistory() {
+			try {
+				const res = await fetch('/api/trades/history');
+				const trades = await res.json();
+				document.getElementById('trade-history').tBodies[0].innerHTML = '';
+				totalPnl = 0; 
+				activePositions = {}; 
+				trades.reverse().forEach(addTradeRow);
+			} catch (e) {console.error(e);}
+		}
+
+		function addTradeRow(t) {
+			const tbody = document.getElementById('trade-history').tBodies[0];
+			const row = tbody.insertRow(0);
+
+			const jstTimeString = new Date(t.time * 1000).toLocaleString('ja-JP', { 
+				timeZone: 'Asia/Tokyo',
+				month: '2-digit',
+				day: '2-digit',
+				hour: '2-digit',
+				minute: '2-digit',
+				second: '2-digit'
+			});
+
+			// ★列が増えたため、システムログ行のcolspanを7から8へ変更
+			if (t.side === 'SYSTEM BOOTING' || t.side === 'SYSTEM READY' || t.side === 'INFO') {
+				row.innerHTML = `<td>${jstTimeString}</td><td colspan="8" style="color:#2962ff; font-weight:bold;">${t.message || 'システム情報'}</td>`;
+				if (t.side === 'SYSTEM READY') document.getElementById('system-status').innerHTML = "✅ システム全稼働中";
+				return;
+			}
+
+			let pnl = 0, pnlText = '-', totalAmt = '-';
+			const key = t.symbol + t.timeframe;
+			let actionHtml = '';
+
+			if (t.side !== 'INFO') {
+				totalAmt = Math.floor(t.price * t.size).toLocaleString() + ' JPY';
+				
+				let pos = activePositions[key];
+				
+				if (!pos) {
+					if (t.side === 'BUY') {
+						activePositions[key] = { type: 'LONG', price: t.price };
+						actionHtml = '<span class="buy">LONG エントリー</span>';
+					} else if (t.side === 'SELL') {
+						activePositions[key] = { type: 'SHORT', price: t.price };
+						actionHtml = '<span class="sell">SHORT エントリー</span>';
+					}
+				} else {
+					if (pos.type === 'LONG' && t.side === 'SELL') {
+						pnl = Math.floor((t.price - pos.price) * t.size);
+						activePositions[key] = null;
+						actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (LONG)</span>';
+					} else if (pos.type === 'SHORT' && t.side === 'BUY') {
+						pnl = Math.floor((pos.price - t.price) * t.size); 
+						activePositions[key] = null;
+						actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (SHORT)</span>';
+					}
+
+					if (actionHtml.includes('決済')) {
+						totalPnl += pnl;
+						document.getElementById('total-pnl').innerText = totalPnl.toLocaleString();
+						pnlText = pnl > 0 ? '+' + pnl.toLocaleString() : pnl.toLocaleString();
+					}
+				}
+			}
+
+			// ★戦略・根拠のHTML組み立て（バックエンドのmessageから冗長なプレフィックスを取り除く）
+			let strategyHtml = '-';
+			if (t.strategy && t.strategy > 0) {
+				const cleanMsg = t.message ? t.message.replace(/🟢 \[.*?\] |🔴 \[.*?\] |✅ \[.*?\] /, '') : '';
+				strategyHtml = `<span class="strategy-badge">戦略${t.strategy}</span><br><span style="font-size: 10px; color: #aaa;">${cleanMsg}</span>`;
+			} else if (t.message) {
+				strategyHtml = `<span style="font-size: 10px; color: #aaa;">${t.message}</span>`;
+			}
+			
+			// ★列を追加して描画
+			row.innerHTML = `<td>${jstTimeString}</td>
+							 <td><b>${t.symbol}</b></td>
+							 <td>${t.timeframe}</td>
+							 <td>${actionHtml}</td>
+							 <td>${strategyHtml}</td>
+							 <td>${t.price > 0 ? t.price.toLocaleString() : '-'}</td>
+							 <td>${t.size}</td>
+							 <td>${totalAmt}</td>
+							 <td class="${pnl >= 0 ? 'buy' : 'sell'}">${pnlText}</td>`;
+		}
+
+		function connect() {
+			stompClient = Stomp.over(new SockJS('/ws-market-data'));
+			stompClient.debug = null;
+			stompClient.connect({}, () => {
+				loadChartData();
+				fetchHistory();
+				stompClient.subscribe('/topic/trades', (msg) => addTradeRow(JSON.parse(msg.body)));
+			}, () => setTimeout(connect, 5000));
+		}
+
+		connect();
 	</script>
 </body>
 
