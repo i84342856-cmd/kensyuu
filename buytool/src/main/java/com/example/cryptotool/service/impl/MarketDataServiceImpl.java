@@ -72,6 +72,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 	// 追加: 戦略8（トレンドチャネル）用の閾値
 	private final double STRATEGY8_APPROACH_THRESHOLD = 0.001; 
 	private final int STRATEGY8_LOOKBACK = 60;
+	// 追加: 戦略8用の許容誤差と決済バッファー
+	private final double STRATEGY8_TREND_TOLERANCE = 0.001; // トレンド線に対する各頂点の許容誤差(0.1%)
+	private final double STRATEGY8_MA5_BUFFER = 0.002;      // 決済時のMA5抜けバッファー(0.2%)
 
 	@PostConstruct
 	public void init() {
@@ -601,8 +604,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 		if (strategyId == 8) {
 			Double targetLine = getTrendLineValue(key, true);
 			double ma5 = getPastMA(key, 5, 0);
-			if ((targetLine != null && current.getHigh() >= targetLine * 0.9995) || (current.getClose() < ma5)) {
-				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 8, "戦略8: ターゲット到達またはMA5割れ決済");
+			double exitThreshold = ma5 * (1.0 - STRATEGY8_MA5_BUFFER);
+			if ((targetLine != null && current.getHigh() >= targetLine * 0.9995) || (current.getClose() < exitThreshold)) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 8, "戦略8: ターゲット到達またはMA5割れ(バッファ加味)決済");
 			}
 		}
 
@@ -635,8 +639,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 		if (strategyId == 8) {
 			Double targetLine = getTrendLineValue(key, false);
 			double ma5 = getPastMA(key, 5, 0);
-			if ((targetLine != null && current.getLow() <= targetLine * 1.0005) || (current.getClose() > ma5)) {
-				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 8, "戦略8: ターゲット到達またはMA5上抜け決済");
+			double exitThreshold = ma5 * (1.0 + STRATEGY8_MA5_BUFFER);
+			if ((targetLine != null && current.getLow() <= targetLine * 1.0005) || (current.getClose() > exitThreshold)) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 8, "戦略8: ターゲット到達またはMA5上抜け(バッファ加味)決済");
 			}
 		}
 
@@ -897,24 +902,56 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private Double getTrendLineValue(String key, boolean isResistance) {
 		List<CandleData> hist = historyMap.get(key);
 		if (hist == null || hist.size() < STRATEGY8_LOOKBACK) return null;
+		
 		List<Integer> peakIndices = new ArrayList<>();
+		List<Double> peakValues = new ArrayList<>();
+		
 		for (int i = hist.size() - STRATEGY8_LOOKBACK; i < hist.size() - 2; i++) {
 			double p1 = isResistance ? hist.get(i-1).getHigh() : hist.get(i-1).getLow();
 			double p2 = isResistance ? hist.get(i).getHigh() : hist.get(i).getLow();
 			double p3 = isResistance ? hist.get(i+1).getHigh() : hist.get(i+1).getLow();
+			
 			if (isResistance) {
-				if (p2 > p1 && p2 > p3) peakIndices.add(i);
+				if (p2 > p1 && p2 > p3) {
+					peakIndices.add(i);
+					peakValues.add(p2);
+				}
 			} else {
-				if (p2 < p1 && p2 < p3) peakIndices.add(i);
+				if (p2 < p1 && p2 < p3) {
+					peakIndices.add(i);
+					peakValues.add(p2);
+				}
 			}
 		}
-		if (peakIndices.size() < 3) return null;
-		int idx2 = peakIndices.get(peakIndices.size() - 1);
-		int idx1 = peakIndices.get(peakIndices.size() - 2);
-		double val2 = isResistance ? hist.get(idx2).getHigh() : hist.get(idx2).getLow();
-		double val1 = isResistance ? hist.get(idx1).getHigh() : hist.get(idx1).getLow();
-		double slope = (val2 - val1) / (idx2 - idx1);
+		
+		int n = peakIndices.size();
+		if (n < 3) return null; 
+		
+		double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+		for (int i = 0; i < n; i++) {
+			double x = peakIndices.get(i);
+			double y = peakValues.get(i);
+			sumX += x;
+			sumY += y;
+			sumXY += x * y;
+			sumXX += x * x;
+		}
+		
+		double slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+		double intercept = (sumY - slope * sumX) / n;
+		
+		for (int i = 0; i < n; i++) {
+			double x = peakIndices.get(i);
+			double actualY = peakValues.get(i);
+			double expectedY = slope * x + intercept;
+			
+			double deviation = Math.abs(actualY - expectedY) / expectedY;
+			if (deviation > STRATEGY8_TREND_TOLERANCE) {
+				return null;
+			}
+		}
+		
 		int currentIndex = hist.size();
-		return val2 + (slope * (currentIndex - idx2));
+		return slope * currentIndex + intercept;
 	}
 }
