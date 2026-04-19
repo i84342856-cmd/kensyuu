@@ -354,9 +354,16 @@ public class MarketDataServiceImpl implements MarketDataService {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 12, "1-2: GC(5&25) (緩和判定)");
 		}
 
-		// 【戦略2-2】緩和版PO
-		if (poUpShort && poUpLong && isMa5UpRel && isMa10UpRel && isMa25UpRel) {
-			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 22, "2-2: PO上昇中(緩和判定)");
+		// 【戦略2-2】ブラッシュアップ版PO
+		boolean isMa5Up22 = isSlopeGreaterThanOrEqual(ma5, ma5Prev, MIN_SLOPE_THRESHOLD); // 戦略2と同様の0.03%
+		boolean isMa10Up22 = isSlopeGreaterThanOrEqual(ma10, ma10Prev, 0.0005); // 0.05%
+		boolean isMa25Up22 = isSlopeGreaterThanOrEqual(ma25, ma25Prev, 0.0005); // 0.05%
+		boolean narrowBeforeUp22 = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.002; // スクイーズ0.2%以下
+		boolean widenUp22 = ((ma5 - ma10) / ma10) >= 0.002; // エクスパンション0.2%以上
+		boolean isMa50Pos22 = isSlopePositive(ma50, ma50Prev);
+
+		if (poUpShort && poUpLong && isMa5Up22 && isMa10Up22 && isMa25Up22 && narrowBeforeUp22 && widenUp22 && isMa50Pos22) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 22, "2-2: PO上昇中(ブラッシュアップ版)");
 		}
 
 		// 【戦略3-2】緩和版反発
@@ -542,9 +549,16 @@ public class MarketDataServiceImpl implements MarketDataService {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 12, "1-2: DC(5&10) + 25MA同調(緩和判定)");
 		}
 
-		// 【戦略2-2】緩和版PO
-		if (poDownShort && poDownLong && isMa5DownRel && isMa10DownRel && isMa25DownRel) {
-			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 22, "2-2: PO下降中(緩和判定)");
+		// 【戦略2-2】ブラッシュアップ版PO
+		boolean isMa5Down22 = isSlopeLessThanOrEqual(ma5, ma5Prev, -MIN_SLOPE_THRESHOLD); // 戦略2と同様の0.03%
+		boolean isMa10Down22 = isSlopeLessThanOrEqual(ma10, ma10Prev, -0.0005); // 0.05%
+		boolean isMa25Down22 = isSlopeLessThanOrEqual(ma25, ma25Prev, -0.0005); // 0.05%
+		boolean narrowBeforeDown22 = ma10_2 > 0 && (Math.abs(ma5_2 - ma10_2) / ma10_2) <= 0.002; // スクイーズ0.2%以下
+		boolean widenDown22 = ((ma10 - ma5) / ma10) >= 0.002; // エクスパンション0.2%以上
+		boolean isMa50Neg22 = isSlopeNegative(ma50, ma50Prev);
+
+		if (poDownShort && poDownLong && isMa5Down22 && isMa10Down22 && isMa25Down22 && narrowBeforeDown22 && widenDown22 && isMa50Neg22) {
+			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 22, "2-2: PO下降中(ブラッシュアップ版)");
 		}
 
 		// 【戦略3-2】緩和版反発
@@ -604,15 +618,28 @@ public class MarketDataServiceImpl implements MarketDataService {
 		if (strategyId == 8) {
 			Double targetLine = getTrendLineValue(key, true);
 			double ma5 = getPastMA(key, 5, 0);
+			
+			// MA5からバッファー分（0.2%）さらに下回ったラインを決済ポイントとする
 			double exitThreshold = ma5 * (1.0 - STRATEGY8_MA5_BUFFER);
+			
 			if ((targetLine != null && current.getHigh() >= targetLine * 0.9995) || (current.getClose() < exitThreshold)) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 8, "戦略8: ターゲット到達またはMA5割れ(バッファ加味)決済");
 			}
 		}
 
-		if ((strategyId == 2 || strategyId == 4 || strategyId == 22 || strategyId == 42) && current.getTime() >= entryTime + (3 * candleSeconds)) {
+		if ((strategyId == 2 || strategyId == 4 || strategyId == 42) && current.getTime() >= entryTime + (3 * candleSeconds)) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "時間経過強制決済(3本目)");
 		}
+		
+		// 戦略2-2用の決済ロジック: 陰線が発生した後の次足終値で決済
+		if (strategyId == 22) {
+			double c2_close = getPastCandleClose(key, 2);
+			double c2_open = getPastCandleOpen(key, 2);
+			if (c2_close > 0 && c2_open > 0 && c2_close < c2_open && current.getTime() >= entryTime + (2 * candleSeconds)) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 22, "2-2: 陰線発生後の次足終値決済");
+			}
+		}
+
 		if ((strategyId == 3 || strategyId == 32) && current.getTime() >= entryTime + (1 * candleSeconds)) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "時間経過強制決済(1本目)");
 		}
@@ -639,7 +666,10 @@ public class MarketDataServiceImpl implements MarketDataService {
 		if (strategyId == 8) {
 			Double targetLine = getTrendLineValue(key, false);
 			double ma5 = getPastMA(key, 5, 0);
+			
+			// MA5からバッファー分（0.2%）さらに上回ったラインを決済ポイントとする
 			double exitThreshold = ma5 * (1.0 + STRATEGY8_MA5_BUFFER);
+			
 			if ((targetLine != null && current.getLow() <= targetLine * 1.0005) || (current.getClose() > exitThreshold)) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 8, "戦略8: ターゲット到達またはMA5上抜け(バッファ加味)決済");
 			}
@@ -658,9 +688,19 @@ public class MarketDataServiceImpl implements MarketDataService {
 			if (deviation > DEVIATION_THRESHOLD && hasLowerShadow) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 7, "25MA下方乖離+下ヒゲ(早期利確)");
 		}
 
-		if ((strategyId == 2 || strategyId == 4 || strategyId == 22 || strategyId == 42) && current.getTime() >= entryTime + (3 * candleSeconds)) {
+		if ((strategyId == 2 || strategyId == 4 || strategyId == 42) && current.getTime() >= entryTime + (3 * candleSeconds)) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "時間経過強制決済(3本目)");
 		}
+		
+		// 戦略2-2用の決済ロジック: 陽線が発生した後の次足終値で決済
+		if (strategyId == 22) {
+			double c2_close = getPastCandleClose(key, 2);
+			double c2_open = getPastCandleOpen(key, 2);
+			if (c2_close > 0 && c2_open > 0 && c2_close > c2_open && current.getTime() >= entryTime + (2 * candleSeconds)) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 22, "2-2: 陽線発生後の次足終値決済");
+			}
+		}
+
 		if ((strategyId == 3 || strategyId == 32) && current.getTime() >= entryTime + (1 * candleSeconds)) {
 			return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "時間経過強制決済(1本目)");
 		}
@@ -893,6 +933,12 @@ public class MarketDataServiceImpl implements MarketDataService {
 		return hist.get(hist.size() - barsAgo).getClose();
 	}
 
+	private double getPastCandleOpen(String key, int barsAgo) {
+		List<CandleData> hist = historyMap.get(key);
+		if (hist == null || hist.size() < barsAgo) return 0.0;
+		return hist.get(hist.size() - barsAgo).getOpen();
+	}
+
 	private double getPastCandleLow(String key, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key);
 		if (hist == null || hist.size() < barsAgo) return 0.0;
@@ -906,6 +952,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		List<Integer> peakIndices = new ArrayList<>();
 		List<Double> peakValues = new ArrayList<>();
 		
+		// 1. 山（抵抗線）または谷（支持線）の頂点抽出
 		for (int i = hist.size() - STRATEGY8_LOOKBACK; i < hist.size() - 2; i++) {
 			double p1 = isResistance ? hist.get(i-1).getHigh() : hist.get(i-1).getLow();
 			double p2 = isResistance ? hist.get(i).getHigh() : hist.get(i).getLow();
@@ -925,8 +972,10 @@ public class MarketDataServiceImpl implements MarketDataService {
 		}
 		
 		int n = peakIndices.size();
+		// 頂点が3つ未満ならトレンドを形成していないと判断
 		if (n < 3) return null; 
 		
+		// 2. 最小二乗法による回帰直線の算出 ( y = slope * x + intercept )
 		double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
 		for (int i = 0; i < n; i++) {
 			double x = peakIndices.get(i);
@@ -940,17 +989,21 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
 		double intercept = (sumY - slope * sumX) / n;
 		
+		// 3. 算出した直線に対して、各頂点が綺麗に接しているか（許容誤差内か）を検証
 		for (int i = 0; i < n; i++) {
 			double x = peakIndices.get(i);
 			double actualY = peakValues.get(i);
 			double expectedY = slope * x + intercept;
 			
+			// 直線の価格と実際の頂点の価格の乖離率を計算
 			double deviation = Math.abs(actualY - expectedY) / expectedY;
 			if (deviation > STRATEGY8_TREND_TOLERANCE) {
+				// 1つでも大きく外れる頂点があれば、信頼できるトレンド線ではないとして破棄
 				return null;
 			}
 		}
 		
+		// 現在のインデックス（最新足）におけるトレンドラインの価格を返す
 		int currentIndex = hist.size();
 		return slope * currentIndex + intercept;
 	}
