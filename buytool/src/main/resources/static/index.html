@@ -178,11 +178,14 @@
 				<span style="color: #ffeb3b;">■ MA 50</span>
 				<span style="color: #ff9100;">■ MA 75</span>
 				<span style="color: #e040fb;">■ MA 100</span>
+				<span style="color: #ff5252;">--- 抵抗線(戦略8)</span>
+				<span style="color: #00e676;">--- 支持線(戦略8)</span>
 			</div>
 			
 			<div id="chart-container"></div>
 			
 			<div class="history-container">
+				<a href="/api/trades/download" class="btn btn-primary">CSVダウンロード</a>
 				<h3>売買履歴 <span style="float:right">合計損益: <span id="total-pnl">0</span> JPY</span></h3>
 				<table id="trade-history">
 					<thead>
@@ -242,6 +245,10 @@
 		const ma50Series = chart.addLineSeries({color: '#ffeb3b', lineWidth: 1});  
 		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  
 		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); 
+
+		// ★追加: トレンド線（支持線・抵抗線）のシリーズ描画設定（破線）
+		const resistanceSeries = chart.addLineSeries({color: '#ff5252', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed});
+		const supportSeries = chart.addLineSeries({color: '#00e676', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed});
 
 		let stompClient = null;
 		let currentSub = null;
@@ -321,6 +328,10 @@
 				ma75Series.setData(cleanData(data.ma75)); 
 				ma100Series.setData(cleanData(data.ma100)); 
 
+				// チャート読み込み時はトレンド線の初期化（空データ）を行う
+				resistanceSeries.setData([]);
+				supportSeries.setData([]);
+
 				if (currentSub) currentSub.unsubscribe();
 				
 				currentSub = stompClient.subscribe(`/topic/${sym}_${tf}`, (msg) => {
@@ -334,6 +345,14 @@
 					if (d.currentMa50 > 0) ma50Series.update({ time: jstTime, value: d.currentMa50 });
 					if (d.currentMa75 > 0) ma75Series.update({ time: jstTime, value: d.currentMa75 });
 					if (d.currentMa100 > 0) ma100Series.update({ time: jstTime, value: d.currentMa100 });
+
+					// ★追加: リアルタイムでバックエンドから送られてくるトレンド線の描画
+					if (d.resistanceLine !== undefined && d.resistanceLine !== null) {
+						resistanceSeries.update({ time: jstTime, value: d.resistanceLine });
+					}
+					if (d.supportLine !== undefined && d.supportLine !== null) {
+						supportSeries.update({ time: jstTime, value: d.supportLine });
+					}
 				});
 				loadSettings();
 			} catch (e) {console.error("チャート取得エラー", e);}
@@ -367,7 +386,6 @@
 				second: '2-digit'
 			});
 
-			// ★列が増えたため、システムログ行のcolspanを7から8へ変更
 			if (t.side === 'SYSTEM BOOTING' || t.side === 'SYSTEM READY' || t.side === 'INFO') {
 				row.innerHTML = `<td>${jstTimeString}</td><td colspan="8" style="color:#2962ff; font-weight:bold;">${t.message || 'システム情報'}</td>`;
 				if (t.side === 'SYSTEM READY') document.getElementById('system-status').innerHTML = "✅ システム全稼働中";
@@ -410,7 +428,6 @@
 				}
 			}
 
-			// ★戦略・根拠のHTML組み立て（バックエンドのmessageから冗長なプレフィックスを取り除く）
 			let strategyHtml = '-';
 			if (t.strategy && t.strategy > 0) {
 				const cleanMsg = t.message ? t.message.replace(/🟢 \[.*?\] |🔴 \[.*?\] |✅ \[.*?\] /, '') : '';
@@ -419,7 +436,6 @@
 				strategyHtml = `<span style="font-size: 10px; color: #aaa;">${t.message}</span>`;
 			}
 			
-			// ★列を追加して描画
 			row.innerHTML = `<td>${jstTimeString}</td>
 							 <td><b>${t.symbol}</b></td>
 							 <td>${t.timeframe}</td>

@@ -15,4 +15,7 @@ public interface TradeLogRepository extends JpaRepository<TradeLog, Long> {
     
     // ★追加：起動時の記憶復元用（指定した通貨・時間足の最新の1件を取得）
     Optional<TradeLog> findFirstBySymbolAndTimeframeOrderByTimeDesc(String symbol, String timeframe);
+    
+ // ★追加: DBから全件を降順で取得する
+    List<TradeLog> findAllByOrderByTimeDesc();
 }
