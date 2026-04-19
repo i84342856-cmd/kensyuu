@@ -3,6 +3,12 @@ package com.example.cryptotool.infrastructure;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import jakarta.annotation.PreDestroy;
 
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
@@ -28,6 +34,10 @@ public class BitFlyerWebsocketClient extends TextWebSocketHandler implements Ini
     private static final String BITFLYER_WS_URL = "wss://ws.lightstream.bitflyer.com/json-rpc";
     private final MarketDataServiceImpl marketDataService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private WebSocketSession currentSession;
+    private final AtomicBoolean isConnecting = new AtomicBoolean(false);
 
     public BitFlyerWebsocketClient(MarketDataServiceImpl marketDataService) {
         this.marketDataService = marketDataService;
@@ -35,23 +45,56 @@ public class BitFlyerWebsocketClient extends TextWebSocketHandler implements Ini
 
     @Override
     public void afterPropertiesSet() {
+        connect();
+    }
+
+    /**
+     * bitFlyerへの接続を開始する。
+     * メンテナンス中などで接続に失敗しても、ウォッチドッグが自動で再試行を繰り返す。
+     */
+    private synchronized void connect() {
+        // すでに接続済みなら何もしない
+        if (currentSession != null && currentSession.isOpen()) {
+            return;
+        }
+
+        // 二重に接続処理が走るのを防止
+        if (!isConnecting.compareAndSet(false, true)) {
+            return;
+        }
+
+        log.info("🔌 bitFlyer WebSocketに接続を試みます...");
         try {
             StandardWebSocketClient client = new StandardWebSocketClient();
             WebSocketConnectionManager manager = new WebSocketConnectionManager(client, this, BITFLYER_WS_URL);
             manager.setAutoStartup(true);
             manager.start();
+
+            // 【鉄壁ロジック】30秒経っても接続完了(afterConnectionEstablished)が呼ばれなければ、
+            // 接続失敗とみなしてフラグをリセットし、再試行を促す
+            scheduler.schedule(() -> {
+                if (currentSession == null || !currentSession.isOpen()) {
+                    log.warn("⚠️ 30秒経過しても接続が確立されません。再接続ステータスをリセットします。");
+                    isConnecting.set(false);
+                    scheduleReconnect();
+                }
+            }, 30, TimeUnit.SECONDS);
+
         } catch (Exception e) {
-            log.error("bitFlyer WebSocketの起動に失敗しました", e);
+            log.error("❌ WebSocketマネージャーの起動中に例外が発生しました", e);
+            isConnecting.set(false);
+            scheduleReconnect();
         }
     }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        this.currentSession = session;
+        this.isConnecting.set(false); // 接続完了したのでフラグを落とす
+        
         log.info("🌐 bitFlyer WebSocket接続完了！リアルタイム購読を開始します...");
         session.setTextMessageSizeLimit(1024 * 1024);
 
-        // ★超重要修正: bitFlyer Lightningがリアルタイム配信に対応している主要通貨のみに絞る
-        // これ以外のマイナー通貨を要求するとエラーで強制切断され、全チャートが固まるため。
         List<String> validPairs = Arrays.asList("BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "MONA_JPY", "XLM_JPY");
 
         for (Symbol symbol : Symbol.values()) {
@@ -83,7 +126,6 @@ public class BitFlyerWebsocketClient extends TextWebSocketHandler implements Ini
                 long timestamp = Instant.parse(execNode.get("exec_date").asText()).getEpochSecond();
                 TickData tick = TickData.builder().symbol(symbol).price(price).timestamp(timestamp).build();
                 
-                // 時間足の指定をなくし、全時間足更新エンジンへ流し込む
                 marketDataService.processRealtimeTick(tick);
             }
         }
@@ -91,6 +133,36 @@ public class BitFlyerWebsocketClient extends TextWebSocketHandler implements Ini
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        this.currentSession = null;
+        this.isConnecting.set(false);
         log.warn("❌ bitFlyer WebSocketが切断されました。理由: {}", status);
+        scheduleReconnect();
+    }
+
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+        log.error("⚠️ WebSocket通信エラーが発生しました", exception);
+        if (session.isOpen()) {
+            session.close();
+        }
+    }
+
+    /**
+     * 再接続をスケジュールする。
+     * bitFlyerのメンテナンス時間を考慮し、短すぎない間隔（30秒）でリトライする。
+     */
+    private void scheduleReconnect() {
+        if (isConnecting.get()) return; 
+
+        log.info("🔄 30秒後に再接続を試みます...");
+        scheduler.schedule(this::connect, 30, TimeUnit.SECONDS);
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (!scheduler.isShutdown()) {
+            log.info("🛑 WebSocketスケジューラーを停止します...");
+            scheduler.shutdownNow();
+        }
     }
 }

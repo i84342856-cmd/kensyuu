@@ -1,11 +1,10 @@
 package com.example.cryptotool.service.impl;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
 import jakarta.annotation.PostConstruct;
@@ -13,6 +12,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import com.example.cryptotool.entity.TradeLog;
 import com.example.cryptotool.infrastructure.BitFlyerPrivateClient;
 import com.example.cryptotool.infrastructure.CryptoCompareClient;
 import com.example.cryptotool.model.TickData;
@@ -21,6 +21,7 @@ import com.example.cryptotool.model.enums.TimeFrame;
 import com.example.cryptotool.model.response.ChartInitResponse;
 import com.example.cryptotool.model.response.ChartInitResponse.CandleData;
 import com.example.cryptotool.model.response.RealtimeUpdateDto;
+import com.example.cryptotool.repository.TradeLogRepository;
 import com.example.cryptotool.service.MarketDataService;
 
 import lombok.AllArgsConstructor;
@@ -36,12 +37,14 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private final SimpMessagingTemplate messagingTemplate;
 	private final CryptoCompareClient cryptoCompareClient;
 	private final BitFlyerPrivateClient bitFlyerPrivateClient;
+	
+	// MySQLに保存するためのリモコン
+	private final TradeLogRepository tradeLogRepository;
 
 	private final Map<String, List<CandleData>> historyMap = new ConcurrentHashMap<>();
 	private final Map<String, CandleData> currentCandleMap = new ConcurrentHashMap<>();
 	private final Map<String, Long> lastOrderTimeMap = new ConcurrentHashMap<>();
 	private final Map<String, Boolean> monitorSettings = new ConcurrentHashMap<>();
-	private final List<Map<String, Object>> tradeHistoryList = new CopyOnWriteArrayList<>();
 	
 	private final Map<String, String> positionMap = new ConcurrentHashMap<>();
 	private final Map<String, Double> entryPriceMap = new ConcurrentHashMap<>();
@@ -59,9 +62,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private final double NEARBY_MA_THRESHOLD = 0.005;
 	private final double PO_WIDEN_THRESHOLD = 0.002;
 	
-	// 追加: 新戦略用の閾値
-	private final double SQUEEZE_THRESHOLD = 0.001; // MA収束判定（0.1%）
-	private final double DEVIATION_THRESHOLD = 0.01; // MA乖離判定（1.0%）
+	private final double SQUEEZE_THRESHOLD = 0.001; 
+	private final double DEVIATION_THRESHOLD = 0.01; 
 
 	@PostConstruct
 	public void init() {
@@ -83,19 +85,47 @@ public class MarketDataServiceImpl implements MarketDataService {
 						}
 						historyMap.put(key, fetched);
 
-						positionMap.put(key, "NONE"); 
+						// ★★★ ここから記憶の復元処理 ★★★
+						Optional<TradeLog> optLatestLog = tradeLogRepository.findFirstBySymbolAndTimeframeOrderByTimeDesc(s.name(), tf.name());
+						boolean hasPosition = false;
+
+						if (optLatestLog.isPresent()) {
+							TradeLog latestLog = optLatestLog.get();
+							// 最新のログが「決済」でも「SYSTEM」でもない場合、それはエントリー状態を意味する
+							if (!latestLog.getMessage().contains("決済") && !latestLog.getMessage().contains("SYSTEM")) {
+								String restoredPos = latestLog.getMessage().contains("[LONG]") ? "LONG" : "SHORT";
+								positionMap.put(key, restoredPos); 
+								entryPriceMap.put(key, latestLog.getPrice()); 
+								positionSizeMap.put(key, latestLog.getSize());
+								entryStrategyMap.put(key, latestLog.getStrategy());
+								
+								long candleStart = (latestLog.getTime() / tf.getSeconds()) * tf.getSeconds();
+								entryCandleTimeMap.put(key, candleStart);
+								hasPosition = true;
+								
+								log.info("🔄 [記憶復元] {} の {} ポジション (価格: {}) をDBから復元し、監視を再開します。", key, restoredPos, latestLog.getPrice());
+							}
+						}
+						
+						if (!hasPosition) {
+							positionMap.put(key, "NONE"); 
+							entryPriceMap.put(key, 0.0); 
+							positionSizeMap.put(key, 0.0);
+							entryStrategyMap.put(key, 0);
+							entryCandleTimeMap.put(key, 0L);
+						}
+						// ★★★ 記憶の復元処理ここまで ★★★
+
 						lastOrderTimeMap.put(key, 0L);
-						monitorSettings.put(key, false);
-						entryPriceMap.put(key, 0.0); 
-						positionSizeMap.put(key, 0.0);
-						entryStrategyMap.put(key, 0);
-						entryCandleTimeMap.put(key, 0L);
+						
+						// ポジションを復元した場合は、決済漏れを防ぐために自動で監視ONにする
+						monitorSettings.put(key, hasPosition);
 
 						Thread.sleep(1000); 
 					}
 				}
 				isSystemReady = true;
-				addSystemLog("SYSTEM READY", "全データの準備が完了し、監視態勢に入りました。");
+				addSystemLog("SYSTEM READY", "全データの準備とポジション復元が完了し、監視態勢に入りました。");
 				log.info("✅ 初期化完了");
 			} catch (Exception e) {
 				log.error("初期化中にエラーが発生しました", e);
@@ -118,7 +148,10 @@ public class MarketDataServiceImpl implements MarketDataService {
 	}
 
 	public Map<String, Boolean> getMonitorSettings() { return monitorSettings; }
-	public List<Map<String, Object>> getTradeHistory() { return tradeHistoryList; }
+	
+	public List<TradeLog> getTradeHistory() { 
+		return tradeLogRepository.findTop100ByOrderByTimeDesc(); 
+	}
 
 	@Data
 	@AllArgsConstructor
@@ -555,7 +588,6 @@ public class MarketDataServiceImpl implements MarketDataService {
 		String key = symbol.name() + "_" + tf.name();
 		String currentPos = positionMap.getOrDefault(key, "NONE");
 		
-		// 修正: 新規エントリー時のみ同足連打を防止し、決済判定はスルーする
 		boolean isNewEntry = "NONE".equals(currentPos);
 		if (isNewEntry && lastOrderTimeMap.get(key).equals(candle.getTime())) return; 
 		
@@ -587,19 +619,18 @@ public class MarketDataServiceImpl implements MarketDataService {
 			}
 		}
 
-		Map<String, Object> logTrade = new HashMap<>();
-		logTrade.put("time", System.currentTimeMillis() / 1000);
-		logTrade.put("symbol", symbol.name());
-		logTrade.put("timeframe", tf.name());
-		logTrade.put("side", decision.getType().name()); 
-		logTrade.put("price", candle.getClose());
-		logTrade.put("size", tradeSize); 
-		logTrade.put("message", actionType); 
+		TradeLog logTrade = new TradeLog();
+		logTrade.setTime(System.currentTimeMillis() / 1000);
+		logTrade.setSymbol(symbol.name());
+		logTrade.setTimeframe(tf.name());
+		logTrade.setSide(decision.getType().name());
+		logTrade.setPrice(candle.getClose());
+		logTrade.setSize(tradeSize);
+		logTrade.setMessage(actionType);
+		logTrade.setStrategy(decision.getStrategyId());
 		
-		logTrade.put("strategy", decision.getStrategyId());
-		
-		tradeHistoryList.add(0, logTrade);
-		messagingTemplate.convertAndSend("/topic/trades", (Object) logTrade);
+		tradeLogRepository.save(logTrade); // MySQLに書き込み！
+		messagingTemplate.convertAndSend("/topic/trades", logTrade);
 
 		lastOrderTimeMap.put(key, candle.getTime());
 		positionMap.put(key, newPos);
@@ -643,19 +674,18 @@ public class MarketDataServiceImpl implements MarketDataService {
 	}
 
 	private void addSystemLog(String status, String message) {
-		Map<String, Object> m = new HashMap<>();
-		m.put("time", System.currentTimeMillis() / 1000);
-		m.put("symbol", "SYSTEM");
-		m.put("timeframe", "-");
-		m.put("side", status);
-		m.put("price", 0.0);
-		m.put("size", 0.0);
-		m.put("message", message);
+		TradeLog systemLog = new TradeLog();
+		systemLog.setTime(System.currentTimeMillis() / 1000);
+		systemLog.setSymbol("SYSTEM");
+		systemLog.setTimeframe("-");
+		systemLog.setSide(status);
+		systemLog.setPrice(0.0);
+		systemLog.setSize(0.0);
+		systemLog.setMessage(message);
+		systemLog.setStrategy(0);
 		
-		m.put("strategy", 0);
-		
-		tradeHistoryList.add(0, m);
-		messagingTemplate.convertAndSend("/topic/trades", (Object) m);
+		tradeLogRepository.save(systemLog);
+		messagingTemplate.convertAndSend("/topic/trades", systemLog);
 	}
 
 	private boolean isSlopePositive(double currentMa, double prevMa) {
@@ -716,14 +746,12 @@ public class MarketDataServiceImpl implements MarketDataService {
 		return swallow1 || swallow2;
 	}
 
-	// 追加: 過去足の終値取得
 	private double getPastCandleClose(String key, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key);
 		if (hist == null || hist.size() < barsAgo) return 0.0;
 		return hist.get(hist.size() - barsAgo).getClose();
 	}
 
-	// 追加: 過去足の安値取得
 	private double getPastCandleLow(String key, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key);
 		if (hist == null || hist.size() < barsAgo) return 0.0;

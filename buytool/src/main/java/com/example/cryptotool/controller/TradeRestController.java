@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.cryptotool.entity.TradeLog;
 import com.example.cryptotool.service.impl.MarketDataServiceImpl;
 
 @RestController
@@ -20,7 +21,7 @@ public class TradeRestController {
     }
 
     @GetMapping("/api/trades/history")
-    public List<Map<String, Object>> getTradeHistory() {
+    public List<TradeLog> getTradeHistory() {
         return marketDataService.getTradeHistory();
     }
 
@@ -34,7 +35,6 @@ public class TradeRestController {
         marketDataService.updateMonitorSetting(symbol, timeframe, active);
     }
     
- // ★追加：一括ONボタン用API
     @PostMapping("/api/settings/monitor/all")
     public void enableAllMonitor(@RequestParam String timeframe) {
         marketDataService.enableAllForTimeframe(timeframe);
