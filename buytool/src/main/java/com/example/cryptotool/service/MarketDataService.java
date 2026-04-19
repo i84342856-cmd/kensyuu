@@ -18,4 +18,7 @@ public interface MarketDataService {
     
  // ★追加: 全件取得用の窓口
     List<TradeLog> getAllTradeHistory();
+    
+ // チャート初期描画用のマーカー履歴取得
+ 	List<TradeLog> getTradeLogsForChart(Symbol symbol, TimeFrame timeFrame);
 }

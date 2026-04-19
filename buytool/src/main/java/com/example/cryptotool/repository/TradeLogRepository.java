@@ -18,4 +18,7 @@ public interface TradeLogRepository extends JpaRepository<TradeLog, Long> {
     
  // ★追加: DBから全件を降順で取得する
     List<TradeLog> findAllByOrderByTimeDesc();
+    
+ // 指定した通貨・時間足のログを古い順（時間昇順）で全件取得
+ 	List<TradeLog> findAllBySymbolAndTimeframeOrderByTimeAsc(String symbol, String timeframe);
 }

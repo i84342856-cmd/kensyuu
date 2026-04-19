@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.cryptotool.entity.TradeLog;
+import com.example.cryptotool.model.enums.Symbol;
+import com.example.cryptotool.model.enums.TimeFrame;
 import com.example.cryptotool.service.impl.MarketDataServiceImpl;
 
 @RestController
@@ -24,7 +26,13 @@ public class TradeRestController {
     public List<TradeLog> getTradeHistory() {
         return marketDataService.getTradeHistory();
     }
-
+    
+ // ★追加: 特定のチャート（通貨×時間足）専用のマーカー履歴を取得するエンドポイント
+    @GetMapping("/api/trades/chart")
+    public List<TradeLog> getChartTrades(@RequestParam Symbol symbol, @RequestParam TimeFrame timeframe) {
+        return marketDataService.getTradeLogsForChart(symbol, timeframe);
+    }
+    
     @GetMapping("/api/settings/monitor")
     public Map<String, Boolean> getMonitorSettings() {
         return marketDataService.getMonitorSettings();

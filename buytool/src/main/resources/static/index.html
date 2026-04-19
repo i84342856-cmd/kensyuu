@@ -137,7 +137,6 @@
 			background: #00e676;
 		}
 
-		/* 戦略バッジ用のスタイル追加 */
 		.strategy-badge {
 			background: #37474f;
 			color: #fff;
@@ -246,7 +245,6 @@
 		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  
 		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); 
 
-		// ★追加: トレンド線（支持線・抵抗線）のシリーズ描画設定（破線）
 		const resistanceSeries = chart.addLineSeries({color: '#ff5252', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed});
 		const supportSeries = chart.addLineSeries({color: '#00e676', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed});
 
@@ -254,6 +252,7 @@
 		let currentSub = null;
 		let totalPnl = 0;
 		let activePositions = {}; 
+		let currentChartMarkers = []; // チャート上のマーカーを保持する配列
 
 		function cleanData(arr) {
 			if (!arr || arr.length === 0) return [];
@@ -313,6 +312,57 @@
 			loadSettings();
 		};
 
+		function createMarkerFromLog(log) {
+			if (!log.message || log.strategy <= 0) return null;
+			
+			const isLong = log.message.includes("[LONG]");
+			const isShort = log.message.includes("[SHORT]");
+			const isLongExit = log.message.includes("[LONG決済]");
+			const isShortExit = log.message.includes("[SHORT決済]");
+			
+			let markerText = "";
+			let isBuyAction = false;
+
+			if (isLong) {
+				markerText = `買いエントリー（戦略${log.strategy}）`;
+				isBuyAction = true;
+			} else if (isLongExit) {
+				markerText = `買い決済（戦略${log.strategy}）`;
+				isBuyAction = false;
+			} else if (isShort) {
+				markerText = `売りエントリー（戦略${log.strategy}）`;
+				isBuyAction = false;
+			} else if (isShortExit) {
+				markerText = `売り決済（戦略${log.strategy}）`;
+				isBuyAction = true;
+			} else {
+				return null;
+			}
+
+			return {
+				time: log.time + JST_OFFSET,
+				position: isBuyAction ? 'belowBar' : 'aboveBar',
+				color: isBuyAction ? '#26a69a' : '#ef5350',
+				shape: isBuyAction ? 'arrowUp' : 'arrowDown',
+				text: markerText
+			};
+		}
+
+		function updateChartMarkers(trades) {
+			const sym = document.getElementById('symbolSelect').value;
+			const tf = document.getElementById('timeframeSelect').value;
+			currentChartMarkers = [];
+
+			// 古い順にソートしてマーカーを生成
+			trades.slice().reverse().forEach(t => {
+				if (t.symbol === sym && t.timeframe === tf) {
+					const marker = createMarkerFromLog(t);
+					if (marker) currentChartMarkers.push(marker);
+				}
+			});
+			candleSeries.setMarkers(currentChartMarkers);
+		}
+
 		async function loadChartData() {
 			const sym = document.getElementById('symbolSelect').value;
 			const tf = document.getElementById('timeframeSelect').value;
@@ -328,7 +378,6 @@
 				ma75Series.setData(cleanData(data.ma75)); 
 				ma100Series.setData(cleanData(data.ma100)); 
 
-				// チャート読み込み時はトレンド線の初期化（空データ）を行う
 				resistanceSeries.setData([]);
 				supportSeries.setData([]);
 
@@ -346,7 +395,6 @@
 					if (d.currentMa75 > 0) ma75Series.update({ time: jstTime, value: d.currentMa75 });
 					if (d.currentMa100 > 0) ma100Series.update({ time: jstTime, value: d.currentMa100 });
 
-					// ★追加: リアルタイムでバックエンドから送られてくるトレンド線の描画
 					if (d.resistanceLine !== undefined && d.resistanceLine !== null) {
 						resistanceSeries.update({ time: jstTime, value: d.resistanceLine });
 					}
@@ -355,6 +403,9 @@
 					}
 				});
 				loadSettings();
+				
+				// チャートデータ読み込み後に履歴を再取得してマーカーを更新
+				fetchHistory();
 			} catch (e) {console.error("チャート取得エラー", e);}
 		}
 
@@ -362,14 +413,21 @@
 		document.getElementById('symbolSelect').onchange = () => { loadSettings(); loadChartData(); };
 		document.getElementById('timeframeSelect').onchange = () => { loadSettings(); loadChartData(); };
 
+		let allTradesHistory = []; // 取得した全履歴を保持
+
 		async function fetchHistory() {
 			try {
 				const res = await fetch('/api/trades/history');
-				const trades = await res.json();
+				allTradesHistory = await res.json();
 				document.getElementById('trade-history').tBodies[0].innerHTML = '';
 				totalPnl = 0; 
 				activePositions = {}; 
-				trades.reverse().forEach(addTradeRow);
+				
+				// テーブル描画
+				allTradesHistory.slice().reverse().forEach(addTradeRow);
+				
+				// マーカー描画
+				updateChartMarkers(allTradesHistory);
 			} catch (e) {console.error(e);}
 		}
 
@@ -452,8 +510,27 @@
 			stompClient.debug = null;
 			stompClient.connect({}, () => {
 				loadChartData();
-				fetchHistory();
-				stompClient.subscribe('/topic/trades', (msg) => addTradeRow(JSON.parse(msg.body)));
+				
+				stompClient.subscribe('/topic/trades', (msg) => {
+					const t = JSON.parse(msg.body);
+					// テーブルに行を追加
+					addTradeRow(t);
+					// 全履歴配列にも追加して保持
+					allTradesHistory.unshift(t);
+					
+					// 現在表示中のチャートと一致するログなら、マーカーを追加して再描画
+					const sym = document.getElementById('symbolSelect').value;
+					const tf = document.getElementById('timeframeSelect').value;
+					if (t.symbol === sym && t.timeframe === tf) {
+						const newMarker = createMarkerFromLog(t);
+						if (newMarker) {
+							// 既存のマーカーリストの最後に追加し、時間順にソートし直す（念のため）
+							currentChartMarkers.push(newMarker);
+							currentChartMarkers.sort((a, b) => a.time - b.time);
+							candleSeries.setMarkers(currentChartMarkers);
+						}
+					}
+				});
 			}, () => setTimeout(connect, 5000));
 		}
 
