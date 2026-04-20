@@ -623,6 +623,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 		long candleSeconds = tf.getSeconds();
 
 		if (strategyId == 9 || strategyId == 92) {
+			if (strategyId == 92) {
+				double tradeSize = positionSizeMap.getOrDefault(key, 0.0);
+				double pnl = (current.getClose() - entryPrice) * tradeSize;
+				if (pnl <= MAX_LOSS_JPY) {
+					return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 92, String.format("【戦略9-2】損失額%.0f円超過による強制損切り決済", pnl));
+				}
+			}
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
 			if (c1_close < c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "【戦略" + strategyId + "】確定足でMA5下抜け（ドテン決済）");
@@ -630,6 +637,11 @@ public class MarketDataServiceImpl implements MarketDataService {
 		}
 
 		if (strategyId == 93) {
+			double tradeSize = positionSizeMap.getOrDefault(key, 0.0);
+			double pnl = (current.getClose() - entryPrice) * tradeSize;
+			if (pnl <= MAX_LOSS_JPY) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 93, String.format("【戦略9-3】損失額%.0f円超過による強制損切り決済", pnl));
+			}
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
 			if (c1_close > c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 93, "【戦略9-3】確定足でMA5上抜け（逆張りドテン決済）");
@@ -704,6 +716,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 		long candleSeconds = tf.getSeconds();
 
 		if (strategyId == 9 || strategyId == 92) {
+			if (strategyId == 92) {
+				double tradeSize = positionSizeMap.getOrDefault(key, 0.0);
+				double pnl = (entryPrice - current.getClose()) * tradeSize;
+				if (pnl <= MAX_LOSS_JPY) {
+					return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 92, String.format("【戦略9-2】損失額%.0f円超過による強制損切り決済", pnl));
+				}
+			}
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
 			if (c1_close > c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "【戦略" + strategyId + "】確定足でMA5上抜け（ドテン決済）");
@@ -711,6 +730,11 @@ public class MarketDataServiceImpl implements MarketDataService {
 		}
 
 		if (strategyId == 93) {
+			double tradeSize = positionSizeMap.getOrDefault(key, 0.0);
+			double pnl = (entryPrice - current.getClose()) * tradeSize;
+			if (pnl <= MAX_LOSS_JPY) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 93, String.format("【戦略9-3】損失額%.0f円超過による強制損切り決済", pnl));
+			}
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
 			if (c1_close < c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 93, "【戦略9-3】確定足でMA5下抜け（逆張りドテン決済）");
