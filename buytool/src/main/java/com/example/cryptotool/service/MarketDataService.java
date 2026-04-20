@@ -1,8 +1,9 @@
 package com.example.cryptotool.service;
 
-import java.util.List; // 追加
+import java.util.List;
+import java.util.Map;
 
-import com.example.cryptotool.entity.TradeLog; // 追加
+import com.example.cryptotool.entity.TradeLog;
 import com.example.cryptotool.model.TickData;
 import com.example.cryptotool.model.enums.Symbol;
 import com.example.cryptotool.model.enums.TimeFrame;
@@ -13,12 +14,20 @@ public interface MarketDataService {
     
     void processRealtimeTick(TickData tick);
 
-    // ★これを追加：履歴取得用のメソッドを定義する
+    // 履歴取得用のメソッド
     List<TradeLog> getTradeHistory();
     
- // ★追加: 全件取得用の窓口
+    // 全件取得用の窓口
     List<TradeLog> getAllTradeHistory();
     
- // チャート初期描画用のマーカー履歴取得
- 	List<TradeLog> getTradeLogsForChart(Symbol symbol, TimeFrame timeFrame);
+    // チャート初期描画用のマーカー履歴取得
+    List<TradeLog> getTradeLogsForChart(Symbol symbol, TimeFrame timeFrame);
+
+    // 監視設定（ON/OFF）の取得と更新
+    Map<String, Boolean> getMonitorSettings();
+    void updateMonitorSetting(String symbol, String timeframe, boolean active);
+
+    // 戦略設定（ON/OFF）の取得と更新
+    Map<String, Boolean> getStrategySettings();
+    void updateStrategySetting(String id, boolean active);
 }

@@ -113,30 +113,6 @@
 			font-weight: bold;
 		}
 
-		.setting-item {
-			display: flex;
-			justify-content: space-between;
-			margin-bottom: 10px;
-			font-size: 14px;
-			border-bottom: 1px solid #434651;
-			padding-bottom: 8px;
-		}
-
-		input[type="checkbox"] {
-			transform: scale(1.3);
-			cursor: pointer;
-		}
-
-		.batch-btn {
-			background: #00c853;
-			font-size: 15px;
-			padding: 10px 20px;
-		}
-
-		.batch-btn:hover {
-			background: #00e676;
-		}
-
 		.strategy-badge {
 			background: #37474f;
 			color: #fff;
@@ -147,14 +123,51 @@
 			display: inline-block;
 			margin-bottom: 2px;
 		}
+
+		/* サイドバー設定用スタイル */
+		.setting-group {
+			margin-bottom: 15px;
+			padding: 10px;
+			background: #1e222d;
+			border-radius: 6px;
+			border: 1px solid #434651;
+		}
+		.setting-group h4 {
+			margin: 0 0 10px 0;
+			color: #ffb74d;
+			font-size: 14px;
+		}
+		.checkbox-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+			gap: 8px;
+			font-size: 12px;
+		}
+		.checkbox-grid label {
+			display: flex;
+			align-items: center;
+			cursor: pointer;
+		}
+		.checkbox-grid input[type="checkbox"] {
+			margin-right: 5px;
+		}
+		.batch-btn {
+			background: #00c853;
+			width: 100%;
+			padding: 10px;
+			margin-top: 5px;
+		}
+		.batch-btn:hover { background: #00e676; }
+		.stop-btn { background: #ef5350; width: 100%; padding: 10px; margin-top: 5px; }
+		.stop-btn:hover { background: #ff8a80; }
 	</style>
 </head>
 
 <body>
 	<div class="controls">
+		<span style="font-weight:bold; color:#ffb74d;">表示チャート:</span>
 		<select id="symbolSelect"></select>
 		<select id="timeframeSelect">
-			<option value="M1">1分足</option>
 			<option value="M5" selected>5分足</option>
 			<option value="M15">15分足</option>
 			<option value="M30">30分足</option>
@@ -162,8 +175,7 @@
 			<option value="D1">日足</option>
 			<option value="W1">週足</option>
 		</select>
-		<button id="loadBtn">チャート再表示</button>
-		<button id="enableAllBtn" class="batch-btn">🔥 全通貨の「1分/5分/15分/30分足」を一括ON</button>
+		<button id="loadBtn">チャート表示</button>
 		<span style="margin-left:auto; color:#2962ff; font-weight:bold;" id="system-status">⏳ システム準備中...</span>
 	</div>
 
@@ -177,8 +189,6 @@
 				<span style="color: #ffeb3b;">■ MA 50</span>
 				<span style="color: #ff9100;">■ MA 75</span>
 				<span style="color: #e040fb;">■ MA 100</span>
-				<span style="color: #ff5252;">--- 抵抗線(戦略8)</span>
-				<span style="color: #00e676;">--- 支持線(戦略8)</span>
 			</div>
 			
 			<div id="chart-container"></div>
@@ -203,87 +213,104 @@
 				</table>
 			</div>
 		</div>
+
 		<div class="side-col">
-			<h3 style="margin-top:0; color:#26a69a;">⚙️ 監視設定 (個別)</h3>
-			<p style="font-size:12px; color:#aaa;">現在表示中の通貨のみの個別設定です。</p>
-			<div id="monitor-settings"></div>
+			<h3 style="margin-top:0; color:#26a69a;">📊 自動売買 監視設定</h3>
+			
+			<div class="setting-group">
+				<h4>対象通貨</h4>
+				<label style="font-size:12px; margin-bottom:8px; display:block;">
+					<input type="checkbox" id="checkAllSymbols"> <b>全通貨 一括選択</b>
+				</label>
+				<div class="checkbox-grid" id="ui-symbols"></div>
+			</div>
+
+			<div class="setting-group">
+				<h4>対象時間足</h4>
+				<label style="font-size:12px; margin-bottom:8px; display:block;">
+					<input type="checkbox" id="checkAllTimeframes"> <b>全時間足 一括選択</b>
+				</label>
+				<div class="checkbox-grid" id="ui-timeframes"></div>
+			</div>
+
+			<button id="applyMonitorBtn" class="batch-btn">✓ チェックした組み合わせを 稼働ON</button>
+			<button id="stopMonitorBtn" class="stop-btn">✗ チェックした組み合わせを 稼働OFF</button>
 
 			<hr style="border-color:#434651; margin: 20px 0;">
-			<h3 style="color:#2962ff;">🤖 稼働中の全Bot一覧</h3>
+
+			<h3 style="color:#e040fb;">⚙️ 戦略 ON/OFF 設定</h3>
+			<div class="setting-group">
+				<div class="checkbox-grid" id="ui-strategies" style="grid-template-columns: 1fr 1fr;">
+					</div>
+			</div>
+
+			<hr style="border-color:#434651; margin: 20px 0;">
+			<h3 style="color:#2962ff;">🤖 現在稼働中の監視Bot</h3>
 			<div id="active-bots-list" style="font-size:13px; color:#ffb74d;">取得中...</div>
 		</div>
 	</div>
 
 	<script>
 		const symbols = ["BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "BCH_JPY", "LTC_JPY", "MONA_JPY", "XLM_JPY", "BAT_JPY", "DOT_JPY", "LINK_JPY", "XYM_JPY", "MATIC_JPY", "SHIB_JPY", "DOGE_JPY", "ADA_JPY", "AVAX_JPY", "SAND_JPY", "CHZ_JPY", "FLR_JPY"];
-		const timeframes = ["M1", "M5", "M15", "M30", "H1", "D1", "W1"];
-		const select = document.getElementById("symbolSelect");
-		symbols.forEach(s => select.add(new Option(s, s)));
+		const timeframes = ["M5", "M15", "M30", "H1", "D1", "W1"]; 
+		const strategies = ["1", "2", "3", "4", "5", "6", "9", "92", "93", "10", "12", "22", "32", "42", "52", "62"];
 
-		const JST_OFFSET = 9 * 60 * 60; 
-
-		const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
-			autoSize: true, 
-			layout: {background: {color: '#1e222d'}, textColor: '#d1d4dc'},
-			grid: {vertLines: {color: '#2b313f'}, horzLines: {color: '#2b313f'}},
-			timeScale: {
-				timeVisible: true,
-				secondsVisible: false,
-				rightOffset: 15
-			},
-			localization: {
-				locale: 'ja-JP',
-				dateFormat: 'yyyy/MM/dd',
-			}
+		// --- 画面初期構築 ---
+		const symSelect = document.getElementById("symbolSelect");
+		const uiSymbols = document.getElementById("ui-symbols");
+		symbols.forEach(s => {
+			symSelect.add(new Option(s, s));
+			uiSymbols.innerHTML += `<label><input type="checkbox" class="sym-chk" value="${s}"> ${s.replace('_JPY','')}</label>`;
 		});
 
-		const candleSeries = chart.addCandlestickSeries({upColor: '#26a69a', downColor: '#ef5350', borderVisible: false});
-		const ma5Series = chart.addLineSeries({color: '#2962ff', lineWidth: 2});   
-		const ma10Series = chart.addLineSeries({color: '#4caf50', lineWidth: 1});  
-		const ma25Series = chart.addLineSeries({color: '#ff1744', lineWidth: 1});  
-		const ma50Series = chart.addLineSeries({color: '#ffeb3b', lineWidth: 1});  
-		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  
-		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); 
+		const uiTimeframes = document.getElementById("ui-timeframes");
+		timeframes.forEach(tf => {
+			uiTimeframes.innerHTML += `<label><input type="checkbox" class="tf-chk" value="${tf}"> ${tf}</label>`;
+		});
 
-		const resistanceSeries = chart.addLineSeries({color: '#ff5252', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed});
-		const supportSeries = chart.addLineSeries({color: '#00e676', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed});
+		const uiStrategies = document.getElementById("ui-strategies");
+		strategies.forEach(st => {
+			uiStrategies.innerHTML += `<label><input type="checkbox" class="st-chk" value="${st}" onchange="toggleStrategy('${st}', this.checked)"> 戦略 ${st}</label>`;
+		});
 
-		let stompClient = null;
-		let currentSub = null;
-		let totalPnl = 0;
-		let activePositions = {}; 
-		let currentChartMarkers = []; // チャート上のマーカーを保持する配列
+		// --- 一括選択の挙動 ---
+		document.getElementById('checkAllSymbols').onchange = (e) => {
+			document.querySelectorAll('.sym-chk').forEach(c => c.checked = e.target.checked);
+		};
+		document.getElementById('checkAllTimeframes').onchange = (e) => {
+			document.querySelectorAll('.tf-chk').forEach(c => c.checked = e.target.checked);
+		};
 
-		function cleanData(arr) {
-			if (!arr || arr.length === 0) return [];
-			const map = new Map();
-			arr.forEach(item => {
-				if (item && item.time) {
-					map.set(item.time, { ...item, time: item.time + JST_OFFSET });
+		// --- 監視ON/OFFボタンのアクション ---
+		async function applyMonitorAction(isActive) {
+			const selectedSyms = Array.from(document.querySelectorAll('.sym-chk:checked')).map(c => c.value);
+			const selectedTfs = Array.from(document.querySelectorAll('.tf-chk:checked')).map(c => c.value);
+			
+			if (selectedSyms.length === 0 || selectedTfs.length === 0) {
+				alert("通貨と時間足を少なくとも1つずつ選択してください。");
+				return;
+			}
+
+			for (const sym of selectedSyms) {
+				for (const tf of selectedTfs) {
+					await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${isActive}`, {method: 'POST'});
 				}
-			});
-			return Array.from(map.values()).sort((a, b) => a.time - b.time);
+			}
+			loadMonitorSettings();
+			alert(`選択した組み合わせの監視を ${isActive ? 'ON' : 'OFF'} にしました。`);
 		}
 
-		async function loadSettings() {
+		document.getElementById('applyMonitorBtn').onclick = () => applyMonitorAction(true);
+		document.getElementById('stopMonitorBtn').onclick = () => applyMonitorAction(false);
+
+		// --- 設定の読み込みとUI反映 ---
+		async function loadMonitorSettings() {
 			const res = await fetch('/api/settings/monitor');
 			const settings = await res.json();
-
-			const container = document.getElementById('monitor-settings');
-			container.innerHTML = '';
-			const curSym = select.value;
-			timeframes.forEach(tf => {
-				const key = curSym + "_" + tf;
-				const active = settings[key] || false;
-				const div = document.createElement('div');
-				div.className = 'setting-item';
-				div.innerHTML = `<span><b>${tf}</b> 監視</span><input type="checkbox" ${active ? 'checked' : ''} onchange="toggleSetting('${curSym}','${tf}',this.checked)">`;
-				container.appendChild(div);
-			});
-
 			const activeBotsContainer = document.getElementById('active-bots-list');
 			activeBotsContainer.innerHTML = '';
 			let activeCount = 0;
+
 			for (const [key, isActive] of Object.entries(settings)) {
 				if (isActive) {
 					activeCount++;
@@ -296,25 +323,57 @@
 			if (activeCount === 0) activeBotsContainer.innerHTML = '<span style="color:#aaa;">現在稼働しているBotはありません</span>';
 		}
 
-		async function toggleSetting(sym, tf, active) {
-			await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${active}`, {method: 'POST'});
-			loadSettings();
+		async function loadStrategySettings() {
+			const res = await fetch('/api/settings/strategy');
+			const settings = await res.json();
+			document.querySelectorAll('.st-chk').forEach(chk => {
+				const stId = chk.value;
+				if (settings[stId] !== undefined) {
+					chk.checked = settings[stId];
+				}
+			});
 		}
 
-		document.getElementById('enableAllBtn').onclick = async () => {
-			const btn = document.getElementById('enableAllBtn');
-			btn.innerText = "🔄 起動中...";
-			const targetTimeframes = ["M1", "M5", "M15", "M30"]; 
-			for (const tf of targetTimeframes) {
-				await fetch(`/api/settings/monitor/all?timeframe=${tf}`, {method: 'POST'});
-			}
-			btn.innerText = "🔥 全通貨の「1分/5分/15分/30分足」を一括ON";
-			loadSettings();
-		};
+		async function toggleStrategy(id, isActive) {
+			await fetch(`/api/settings/strategy?id=${id}&active=${isActive}`, {method: 'POST'});
+		}
+
+		// --- チャート関連 ---
+		const JST_OFFSET = 9 * 60 * 60; 
+		const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
+			autoSize: true, 
+			layout: {background: {color: '#1e222d'}, textColor: '#d1d4dc'},
+			grid: {vertLines: {color: '#2b313f'}, horzLines: {color: '#2b313f'}},
+			timeScale: {timeVisible: true, secondsVisible: false, rightOffset: 15},
+			localization: {locale: 'ja-JP', dateFormat: 'yyyy/MM/dd'}
+		});
+
+		const candleSeries = chart.addCandlestickSeries({upColor: '#26a69a', downColor: '#ef5350', borderVisible: false});
+		const ma5Series = chart.addLineSeries({color: '#2962ff', lineWidth: 2});   
+		const ma10Series = chart.addLineSeries({color: '#4caf50', lineWidth: 1});  
+		const ma25Series = chart.addLineSeries({color: '#ff1744', lineWidth: 1});  
+		const ma50Series = chart.addLineSeries({color: '#ffeb3b', lineWidth: 1});  
+		const ma75Series = chart.addLineSeries({color: '#ff9100', lineWidth: 1});  
+		const ma100Series = chart.addLineSeries({color: '#e040fb', lineWidth: 1}); 
+		
+		let stompClient = null;
+		let currentSub = null;
+		let totalPnl = 0;
+		let activePositions = {}; 
+		let currentChartMarkers = []; 
+		let allTradesHistory = [];
+
+		function cleanData(arr) {
+			if (!arr || arr.length === 0) return [];
+			const map = new Map();
+			arr.forEach(item => {
+				if (item && item.time) map.set(item.time, { ...item, time: item.time + JST_OFFSET });
+			});
+			return Array.from(map.values()).sort((a, b) => a.time - b.time);
+		}
 
 		function createMarkerFromLog(log) {
 			if (!log.message || log.strategy <= 0) return null;
-			
 			const isLong = log.message.includes("[LONG]");
 			const isShort = log.message.includes("[SHORT]");
 			const isLongExit = log.message.includes("[LONG決済]");
@@ -323,21 +382,11 @@
 			let markerText = "";
 			let isBuyAction = false;
 
-			if (isLong) {
-				markerText = `買いエントリー（戦略${log.strategy}）`;
-				isBuyAction = true;
-			} else if (isLongExit) {
-				markerText = `買い決済（戦略${log.strategy}）`;
-				isBuyAction = false;
-			} else if (isShort) {
-				markerText = `売りエントリー（戦略${log.strategy}）`;
-				isBuyAction = false;
-			} else if (isShortExit) {
-				markerText = `売り決済（戦略${log.strategy}）`;
-				isBuyAction = true;
-			} else {
-				return null;
-			}
+			if (isLong) { markerText = `買い（戦略${log.strategy}）`; isBuyAction = true; } 
+			else if (isLongExit) { markerText = `買い決済（戦略${log.strategy}）`; isBuyAction = false; } 
+			else if (isShort) { markerText = `売り（戦略${log.strategy}）`; isBuyAction = false; } 
+			else if (isShortExit) { markerText = `売り決済（戦略${log.strategy}）`; isBuyAction = true; } 
+			else { return null; }
 
 			return {
 				time: log.time + JST_OFFSET,
@@ -352,8 +401,6 @@
 			const sym = document.getElementById('symbolSelect').value;
 			const tf = document.getElementById('timeframeSelect').value;
 			currentChartMarkers = [];
-
-			// 古い順にソートしてマーカーを生成
 			trades.slice().reverse().forEach(t => {
 				if (t.symbol === sym && t.timeframe === tf) {
 					const marker = createMarkerFromLog(t);
@@ -378,9 +425,6 @@
 				ma75Series.setData(cleanData(data.ma75)); 
 				ma100Series.setData(cleanData(data.ma100)); 
 
-				resistanceSeries.setData([]);
-				supportSeries.setData([]);
-
 				if (currentSub) currentSub.unsubscribe();
 				
 				currentSub = stompClient.subscribe(`/topic/${sym}_${tf}`, (msg) => {
@@ -394,26 +438,15 @@
 					if (d.currentMa50 > 0) ma50Series.update({ time: jstTime, value: d.currentMa50 });
 					if (d.currentMa75 > 0) ma75Series.update({ time: jstTime, value: d.currentMa75 });
 					if (d.currentMa100 > 0) ma100Series.update({ time: jstTime, value: d.currentMa100 });
-
-					if (d.resistanceLine !== undefined && d.resistanceLine !== null) {
-						resistanceSeries.update({ time: jstTime, value: d.resistanceLine });
-					}
-					if (d.supportLine !== undefined && d.supportLine !== null) {
-						supportSeries.update({ time: jstTime, value: d.supportLine });
-					}
 				});
-				loadSettings();
 				
-				// チャートデータ読み込み後に履歴を再取得してマーカーを更新
 				fetchHistory();
 			} catch (e) {console.error("チャート取得エラー", e);}
 		}
 
 		document.getElementById('loadBtn').onclick = loadChartData;
-		document.getElementById('symbolSelect').onchange = () => { loadSettings(); loadChartData(); };
-		document.getElementById('timeframeSelect').onchange = () => { loadSettings(); loadChartData(); };
-
-		let allTradesHistory = []; // 取得した全履歴を保持
+		document.getElementById('symbolSelect').onchange = () => { loadChartData(); };
+		document.getElementById('timeframeSelect').onchange = () => { loadChartData(); };
 
 		async function fetchHistory() {
 			try {
@@ -423,10 +456,7 @@
 				totalPnl = 0; 
 				activePositions = {}; 
 				
-				// テーブル描画
 				allTradesHistory.slice().reverse().forEach(addTradeRow);
-				
-				// マーカー描画
 				updateChartMarkers(allTradesHistory);
 			} catch (e) {console.error(e);}
 		}
@@ -436,12 +466,7 @@
 			const row = tbody.insertRow(0);
 
 			const jstTimeString = new Date(t.time * 1000).toLocaleString('ja-JP', { 
-				timeZone: 'Asia/Tokyo',
-				month: '2-digit',
-				day: '2-digit',
-				hour: '2-digit',
-				minute: '2-digit',
-				second: '2-digit'
+				timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
 			});
 
 			if (t.side === 'SYSTEM BOOTING' || t.side === 'SYSTEM READY' || t.side === 'INFO') {
@@ -456,28 +481,14 @@
 
 			if (t.side !== 'INFO') {
 				totalAmt = Math.floor(t.price * t.size).toLocaleString() + ' JPY';
-				
 				let pos = activePositions[key];
 				
 				if (!pos) {
-					if (t.side === 'BUY') {
-						activePositions[key] = { type: 'LONG', price: t.price };
-						actionHtml = '<span class="buy">LONG エントリー</span>';
-					} else if (t.side === 'SELL') {
-						activePositions[key] = { type: 'SHORT', price: t.price };
-						actionHtml = '<span class="sell">SHORT エントリー</span>';
-					}
+					if (t.side === 'BUY') { activePositions[key] = { type: 'LONG', price: t.price }; actionHtml = '<span class="buy">LONG エントリー</span>'; }
+					else if (t.side === 'SELL') { activePositions[key] = { type: 'SHORT', price: t.price }; actionHtml = '<span class="sell">SHORT エントリー</span>'; }
 				} else {
-					if (pos.type === 'LONG' && t.side === 'SELL') {
-						pnl = Math.floor((t.price - pos.price) * t.size);
-						activePositions[key] = null;
-						actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (LONG)</span>';
-					} else if (pos.type === 'SHORT' && t.side === 'BUY') {
-						pnl = Math.floor((pos.price - t.price) * t.size); 
-						activePositions[key] = null;
-						actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (SHORT)</span>';
-					}
-
+					if (pos.type === 'LONG' && t.side === 'SELL') { pnl = Math.floor((t.price - pos.price) * t.size); activePositions[key] = null; actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (LONG)</span>'; }
+					else if (pos.type === 'SHORT' && t.side === 'BUY') { pnl = Math.floor((pos.price - t.price) * t.size); activePositions[key] = null; actionHtml = '<span style="color:#ffb74d; font-weight:bold;">✅ 決済 (SHORT)</span>'; }
 					if (actionHtml.includes('決済')) {
 						totalPnl += pnl;
 						document.getElementById('total-pnl').innerText = totalPnl.toLocaleString();
@@ -494,37 +505,27 @@
 				strategyHtml = `<span style="font-size: 10px; color: #aaa;">${t.message}</span>`;
 			}
 			
-			row.innerHTML = `<td>${jstTimeString}</td>
-							 <td><b>${t.symbol}</b></td>
-							 <td>${t.timeframe}</td>
-							 <td>${actionHtml}</td>
-							 <td>${strategyHtml}</td>
-							 <td>${t.price > 0 ? t.price.toLocaleString() : '-'}</td>
-							 <td>${t.size}</td>
-							 <td>${totalAmt}</td>
-							 <td class="${pnl >= 0 ? 'buy' : 'sell'}">${pnlText}</td>`;
+			row.innerHTML = `<td>${jstTimeString}</td><td><b>${t.symbol}</b></td><td>${t.timeframe}</td><td>${actionHtml}</td><td>${strategyHtml}</td><td>${t.price > 0 ? t.price.toLocaleString() : '-'}</td><td>${t.size}</td><td>${totalAmt}</td><td class="${pnl >= 0 ? 'buy' : 'sell'}">${pnlText}</td>`;
 		}
 
 		function connect() {
 			stompClient = Stomp.over(new SockJS('/ws-market-data'));
 			stompClient.debug = null;
 			stompClient.connect({}, () => {
+				loadMonitorSettings();
+				loadStrategySettings();
 				loadChartData();
 				
 				stompClient.subscribe('/topic/trades', (msg) => {
 					const t = JSON.parse(msg.body);
-					// テーブルに行を追加
 					addTradeRow(t);
-					// 全履歴配列にも追加して保持
 					allTradesHistory.unshift(t);
 					
-					// 現在表示中のチャートと一致するログなら、マーカーを追加して再描画
 					const sym = document.getElementById('symbolSelect').value;
 					const tf = document.getElementById('timeframeSelect').value;
 					if (t.symbol === sym && t.timeframe === tf) {
 						const newMarker = createMarkerFromLog(t);
 						if (newMarker) {
-							// 既存のマーカーリストの最後に追加し、時間順にソートし直す（念のため）
 							currentChartMarkers.push(newMarker);
 							currentChartMarkers.sort((a, b) => a.time - b.time);
 							candleSeries.setMarkers(currentChartMarkers);

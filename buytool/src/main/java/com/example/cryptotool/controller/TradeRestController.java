@@ -27,11 +27,12 @@ public class TradeRestController {
         return marketDataService.getTradeHistory();
     }
     
- // ★追加: 特定のチャート（通貨×時間足）専用のマーカー履歴を取得するエンドポイント
     @GetMapping("/api/trades/chart")
     public List<TradeLog> getChartTrades(@RequestParam Symbol symbol, @RequestParam TimeFrame timeframe) {
         return marketDataService.getTradeLogsForChart(symbol, timeframe);
     }
+    
+    // --- 監視設定 (Monitor Settings) ---
     
     @GetMapping("/api/settings/monitor")
     public Map<String, Boolean> getMonitorSettings() {
@@ -42,9 +43,16 @@ public class TradeRestController {
     public void updateSetting(@RequestParam String symbol, @RequestParam String timeframe, @RequestParam boolean active) {
         marketDataService.updateMonitorSetting(symbol, timeframe, active);
     }
+
+    // --- 戦略設定 (Strategy Settings) ---
     
-    @PostMapping("/api/settings/monitor/all")
-    public void enableAllMonitor(@RequestParam String timeframe) {
-        marketDataService.enableAllForTimeframe(timeframe);
+    @GetMapping("/api/settings/strategy")
+    public Map<String, Boolean> getStrategySettings() {
+        return marketDataService.getStrategySettings();
+    }
+
+    @PostMapping("/api/settings/strategy")
+    public void updateStrategySetting(@RequestParam String id, @RequestParam boolean active) {
+        marketDataService.updateStrategySetting(id, active);
     }
 }
