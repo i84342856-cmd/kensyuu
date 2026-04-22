@@ -10,6 +10,7 @@ import java.util.concurrent.Executors;
 import jakarta.annotation.PostConstruct;
 
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.example.cryptotool.entity.TradeLog;
@@ -55,6 +56,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private final boolean IS_DEMO_MODE = true;
 	private boolean isSystemReady = false;
 
+	// 最後にデータを受信した時間を記録する変数（サイレント切断監視用）
+	private long lastTickReceivedTime = System.currentTimeMillis();
+
 	// 【修正】取引額を150万から40万（30〜50万の範囲）へ引き下げ
 	private final double TARGET_TRADE_AMOUNT = 400000.0;
 
@@ -68,16 +72,21 @@ public class MarketDataServiceImpl implements MarketDataService {
 		strategySettings.put("5", true);
 		strategySettings.put("6", true);
 		strategySettings.put("9", false);
-		strategySettings.put("92", true);
+		strategySettings.put("92", false); // 古い戦略はデフォルトOFFに変更
 		strategySettings.put("93", false);
-		strategySettings.put("94", true);
-		strategySettings.put("10", true); 
+		strategySettings.put("94", false); // 古い戦略はデフォルトOFFに変更
+		strategySettings.put("10", false); // 古い戦略はデフォルトOFFに変更
 		strategySettings.put("12", false);
 		strategySettings.put("22", false);
 		strategySettings.put("32", true);
 		strategySettings.put("42", true);
 		strategySettings.put("52", true);
 		strategySettings.put("62", true);
+		
+		// 新規追加された最適化戦略（デフォルトON）
+		strategySettings.put("922", true);
+		strategySettings.put("942", true);
+		strategySettings.put("102", true);
 	}
 
 	// --- 各種閾値 ---
@@ -89,13 +98,13 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 	private final double STRATEGY3_MA5_BUFFER = 0.002;
 
-	// 【修正】戦略9系（92, 93, 94）の損切り額を-6000円に拡大
+	// 【修正】戦略9系（92, 93, 94）の損切り額を-3000円に拡大
 	private final double BB_SQUEEZE_THRESHOLD = 0.01; 
 	private final double MA_FLAT_THRESHOLD = 0.0005; 
-	private final double MAX_LOSS_JPY = -6000.0; 
+	private final double MAX_LOSS_JPY = -3000.0; 
 
-	// 【修正】戦略10の損切り額を-8000円に拡大
-	private final double STRATEGY10_MAX_LOSS_JPY = -5000.0; 
+	// 【修正】戦略10の損切り額を-2000円に拡大
+	private final double STRATEGY10_MAX_LOSS_JPY = -2000.0; 
 
 	private boolean isTargetSymbol(Symbol s) {
 		return true; 
@@ -226,6 +235,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 	@Override
 	public void processRealtimeTick(TickData tick) {
+		// ★データが届くたびに「最終受信時刻」を現在時刻に上書き
+		this.lastTickReceivedTime = System.currentTimeMillis();
+
 		if (!isSystemReady) return;
 		if (!isTargetSymbol(tick.getSymbol())) return;
 
@@ -235,8 +247,25 @@ public class MarketDataServiceImpl implements MarketDataService {
 		}
 	}
 
+	// ★新規追加：死活監視タイマー（1分ごとにチェック）
+	@Scheduled(fixedRate = 60000)
+	public void watchdogTimer() {
+		long now = System.currentTimeMillis();
+		// もし「最後の受信から5分（300,000ミリ秒）」経過していたら異常とみなす
+		if (now - lastTickReceivedTime > 300000) {
+			log.error("🚨 5分間データを受信していません。サイレント切断の疑いがあるため強制再接続します...");
+			
+			// WebSocketクライアント等の再接続処理をここに実装します
+			// 例: bitFlyerWebsocketClient.reconnect();
+			
+			// 連続発火を防ぐために時間をリセット
+			lastTickReceivedTime = now;
+		}
+	}
+
 	private void updateAndCheckSignal(TickData tick, TimeFrame tf) {
-		String key = tick.getSymbol().name() + "_" + tf.name();
+		Symbol symbol = tick.getSymbol();
+		String key = symbol.name() + "_" + tf.name();
 		long candleStart = (tick.getTimestamp() / tf.getSeconds()) * tf.getSeconds();
 		double price = tick.getPrice();
 
@@ -254,7 +283,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 			current.setLow(Math.min(current.getLow(), price));
 		}
 
-		SignalDecision decision = checkSignal(tf, key, current);
+		// 引数に symbol と tf を追加して渡す
+		SignalDecision decision = checkSignal(symbol, tf, key, current);
 
 		if (decision != null && decision.getType() != RealtimeUpdateDto.SignalType.NONE
 				&& monitorSettings.getOrDefault(key, false)) {
@@ -269,16 +299,16 @@ public class MarketDataServiceImpl implements MarketDataService {
 						.signal(decision != null ? decision.getType() : RealtimeUpdateDto.SignalType.NONE).build());
 	}
 
-	private SignalDecision checkSignal(TimeFrame tf, String key, CandleData current) {
+	private SignalDecision checkSignal(Symbol symbol, TimeFrame tf, String key, CandleData current) {
 		if (current == null) return null;
 
 		String currentPosition = positionMap.getOrDefault(key, "NONE");
 
 		if ("NONE".equals(currentPosition)) {
-			SignalDecision buySignal = checkBuySignal(key, current);
+			SignalDecision buySignal = checkBuySignal(symbol, tf, key, current);
 			if (buySignal != null) return buySignal;
 
-			SignalDecision shortSignal = checkShortSignal(key, current);
+			SignalDecision shortSignal = checkShortSignal(symbol, tf, key, current);
 			if (shortSignal != null) return shortSignal;
 		} else if ("LONG".equals(currentPosition)) {
 			return checkExitLongSignal(tf, key, current);
@@ -288,7 +318,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		return null;
 	}
 
-	private SignalDecision checkBuySignal(String key, CandleData current) {
+	private SignalDecision checkBuySignal(Symbol symbol, TimeFrame tf, String key, CandleData current) {
 		double ma5 = getPastMA(key, 5, 0), ma5Prev = getPastMA(key, 5, 1);
 		double ma10 = getPastMA(key, 10, 0), ma10Prev = getPastMA(key, 10, 1);
 		double ma25 = getPastMA(key, 25, 0), ma25Prev = getPastMA(key, 25, 1);
@@ -365,6 +395,55 @@ public class MarketDataServiceImpl implements MarketDataService {
 		boolean crossUp = getPastCandleClose(key, 2) <= getPastMA(key, 5, 2) && getPastCandleClose(key, 1) > getPastMA(key, 5, 1);
 		boolean crossDown = getPastCandleClose(key, 2) >= getPastMA(key, 5, 2) && getPastCandleClose(key, 1) < getPastMA(key, 5, 1);
 
+		// --- 【追加】戦略922 ---
+		if (strategySettings.getOrDefault("922", false)) {
+			boolean isTargetSym = (symbol == Symbol.FX_BTC_JPY || symbol == Symbol.BTC_JPY);
+			boolean isTargetTf = (tf == TimeFrame.M15);
+			if (isTargetSym && isTargetTf && crossUp && isMa25Up && isMa50Up) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 922, "【戦略922】確定足MA5上抜け ＋ PO同調");
+			}
+		}
+
+		// --- 【追加】戦略942 ---
+		if (strategySettings.getOrDefault("942", false)) {
+			boolean isTargetSym = (symbol == Symbol.XLM_JPY || symbol == Symbol.BTC_JPY || symbol == Symbol.FX_BTC_JPY);
+			boolean isTargetTf = (tf == TimeFrame.M15 || tf == TimeFrame.M30);
+			if (isTargetSym && isTargetTf) {
+				double sma20 = getPastMA(key, 20, 0);
+				double stdDev20 = getStdDev(key, 20, 0);
+				double bandWidth = (sma20 > 0) ? (4 * stdDev20) / sma20 : 0;
+				boolean isSqueeze = bandWidth > 0 && bandWidth <= BB_SQUEEZE_THRESHOLD;
+				boolean isMa75Flat = Math.abs(ma75 - ma75Prev) / ma75Prev <= MA_FLAT_THRESHOLD;
+
+				if (crossDown && (isSqueeze || isMa75Flat)) {
+					return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 942, "【戦略942】MA5下抜け ＋ レンジ逆張り(買専)");
+				}
+			}
+		}
+
+		// --- 【追加】戦略102 ---
+		if (strategySettings.getOrDefault("102", false)) {
+			boolean isTargetSym = (symbol == Symbol.ETH_JPY || symbol == Symbol.XLM_JPY || symbol == Symbol.XRP_JPY);
+			boolean isTargetTf = (tf == TimeFrame.M15);
+			if (isTargetSym && isTargetTf) {
+				double c1_close = getPastCandleClose(key, 1);
+				double c2_close = getPastCandleClose(key, 2);
+				
+				double c1_sma20 = getPastMA(key, 20, 1);
+				double c1_std = getStdDev(key, 20, 1);
+				double c1_lower = c1_sma20 - (2 * c1_std);
+				
+				double c2_sma20 = getPastMA(key, 20, 2);
+				double c2_std = getStdDev(key, 20, 2);
+				double c2_lower = c2_sma20 - (2 * c2_std);
+
+				if (c1_close < c1_lower && c2_close >= c2_lower) {
+					return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 102, "【戦略102】BB下限(-2σ)下抜け逆張り買い");
+				}
+			}
+		}
+
+		// 既存の戦略
 		if (strategySettings.getOrDefault("92", false)) {
 			if (crossUp && ma10 >= ma10Prev && ma25 >= ma25Prev && ma50 >= ma50Prev) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 92, "【戦略9-2】確定足MA5上抜け ＋ MA10/25/50上向き同調（ドテン買い）");
@@ -433,7 +512,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		return null;
 	}
 
-	private SignalDecision checkShortSignal(String key, CandleData current) {
+	private SignalDecision checkShortSignal(Symbol symbol, TimeFrame tf, String key, CandleData current) {
 		double ma5 = getPastMA(key, 5, 0), ma5Prev = getPastMA(key, 5, 1);
 		double ma10 = getPastMA(key, 10, 0), ma10Prev = getPastMA(key, 10, 1);
 		double ma25 = getPastMA(key, 25, 0), ma25Prev = getPastMA(key, 25, 1);
@@ -534,6 +613,38 @@ public class MarketDataServiceImpl implements MarketDataService {
 		boolean crossUp = getPastCandleClose(key, 2) <= getPastMA(key, 5, 2) && getPastCandleClose(key, 1) > getPastMA(key, 5, 1);
 		boolean crossDown = getPastCandleClose(key, 2) >= getPastMA(key, 5, 2) && getPastCandleClose(key, 1) < getPastMA(key, 5, 1);
 
+		// --- 【追加】戦略922 ---
+		if (strategySettings.getOrDefault("922", false)) {
+			boolean isTargetSym = (symbol == Symbol.FX_BTC_JPY || symbol == Symbol.BTC_JPY);
+			boolean isTargetTf = (tf == TimeFrame.M15);
+			if (isTargetSym && isTargetTf && crossDown && isMa25Down && isMa50Down) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 922, "【戦略922】確定足MA5下抜け ＋ PO同調");
+			}
+		}
+
+		// --- 【追加】戦略102 ---
+		if (strategySettings.getOrDefault("102", false)) {
+			boolean isTargetSym = (symbol == Symbol.ETH_JPY || symbol == Symbol.XLM_JPY || symbol == Symbol.XRP_JPY);
+			boolean isTargetTf = (tf == TimeFrame.M15);
+			if (isTargetSym && isTargetTf) {
+				double c1_close = getPastCandleClose(key, 1);
+				double c2_close = getPastCandleClose(key, 2);
+				
+				double c1_sma20 = getPastMA(key, 20, 1);
+				double c1_std = getStdDev(key, 20, 1);
+				double c1_upper = c1_sma20 + (2 * c1_std);
+				
+				double c2_sma20 = getPastMA(key, 20, 2);
+				double c2_std = getStdDev(key, 20, 2);
+				double c2_upper = c2_sma20 + (2 * c2_std);
+
+				if (c1_close > c1_upper && c2_close <= c2_upper) {
+					return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 102, "【戦略102】BB上限(+2σ)上抜け逆張り売り");
+				}
+			}
+		}
+
+		// 既存の戦略
 		if (strategySettings.getOrDefault("92", false)) {
 			if (crossDown && ma10 <= ma10Prev && ma25 <= ma25Prev && ma50 <= ma50Prev) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 92, "【戦略9-2】確定足MA5下抜け ＋ MA10/25/50下向き同調（ドテン売り）");
@@ -610,21 +721,21 @@ public class MarketDataServiceImpl implements MarketDataService {
 		long entryTime = entryCandleTimeMap.getOrDefault(key, 0L);
 		long candleSeconds = tf.getSeconds();
 
-		// 【修正】戦略9-2, 9-3, 9-4 すべてに金額ベースの損切りを適用
 		double tradeSize = positionSizeMap.getOrDefault(key, 0.0);
-		double pnl = (current.getClose() - entryPrice) * tradeSize; // 今の含み損益
+		double pnl = (current.getClose() - entryPrice) * tradeSize; 
 
-		if (strategyId == 92 || strategyId == 93 || strategyId == 94) {
+		// 【追加】新旧戦略の損切り
+		if (strategyId == 92 || strategyId == 93 || strategyId == 94 || strategyId == 922 || strategyId == 942) {
 			if (pnl <= MAX_LOSS_JPY) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, 
 					String.format("【戦略%d】損失額%.0f円超過による強制損切り決済", strategyId, pnl));
 			}
 		}
 
-		if (strategyId == 9 || strategyId == 92) {
+		if (strategyId == 9 || strategyId == 92 || strategyId == 922) {
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
-			if (c1_close < c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "【戦略" + strategyId + "】確定足でMA5下抜け（ドテン決済）");
+			if (c1_close < c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "【戦略" + strategyId + "】確定足でMA5下抜け決済");
 			return null;
 		}
 
@@ -635,20 +746,20 @@ public class MarketDataServiceImpl implements MarketDataService {
 			return null;
 		}
 
-		if (strategyId == 94) {
+		if (strategyId == 94 || strategyId == 942) {
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
-			if (c1_close > c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 94, "【戦略9-4】確定足でMA5上抜け（逆張りドテン決済）");
+			if (c1_close > c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "【戦略" + strategyId + "】確定足でMA5上抜け決済");
 			return null;
 		}
 
-		if (strategyId == 10) {
+		if (strategyId == 10 || strategyId == 102) {
 			if (pnl <= STRATEGY10_MAX_LOSS_JPY) {
-				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 10, String.format("【戦略10】損失額%.0f円超過による強制損切り", pnl));
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, String.format("【戦略%d】損失額%.0f円超過による強制損切り", strategyId, pnl));
 			}
 
 			if (current.getTime() >= entryTime + candleSeconds) {
-				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 10, "【戦略10】次足終値での強制決済");
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, strategyId, "【戦略" + strategyId + "】次足終値での強制決済");
 			}
 			return null; 
 		}
@@ -688,21 +799,21 @@ public class MarketDataServiceImpl implements MarketDataService {
 		long entryTime = entryCandleTimeMap.getOrDefault(key, 0L);
 		long candleSeconds = tf.getSeconds();
 
-		// 【修正】戦略9-2, 9-3, 9-4 すべてに金額ベースの損切りを適用
 		double tradeSize = positionSizeMap.getOrDefault(key, 0.0);
-		double pnl = (entryPrice - current.getClose()) * tradeSize; // ショートの含み損益
+		double pnl = (entryPrice - current.getClose()) * tradeSize; 
 
-		if (strategyId == 92 || strategyId == 93 || strategyId == 94) {
+		// 【追加】新旧戦略の損切り
+		if (strategyId == 92 || strategyId == 93 || strategyId == 94 || strategyId == 922) {
 			if (pnl <= MAX_LOSS_JPY) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, 
 					String.format("【戦略%d】損失額%.0f円超過による強制損切り決済", strategyId, pnl));
 			}
 		}
 
-		if (strategyId == 9 || strategyId == 92) {
+		if (strategyId == 9 || strategyId == 92 || strategyId == 922) {
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
-			if (c1_close > c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "【戦略" + strategyId + "】確定足でMA5上抜け（ドテン決済）");
+			if (c1_close > c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "【戦略" + strategyId + "】確定足でMA5上抜け決済");
 			return null;
 		}
 
@@ -713,20 +824,20 @@ public class MarketDataServiceImpl implements MarketDataService {
 			return null;
 		}
 
-		if (strategyId == 94) {
+		if (strategyId == 94 || strategyId == 942) {
 			double c1_close = getPastCandleClose(key, 1);
 			double c1_ma5 = getPastMA(key, 5, 1);
-			if (c1_close < c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 94, "【戦略9-4】確定足でMA5下抜け（逆張りドテン決済）");
+			if (c1_close < c1_ma5) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "【戦略" + strategyId + "】確定足でMA5下抜け決済");
 			return null;
 		}
 
-		if (strategyId == 10) {
+		if (strategyId == 10 || strategyId == 102) {
 			if (pnl <= STRATEGY10_MAX_LOSS_JPY) {
-				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 10, String.format("【戦略10】損失額%.0f円超過による強制損切り", pnl));
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, String.format("【戦略%d】損失額%.0f円超過による強制損切り", strategyId, pnl));
 			}
 
 			if (current.getTime() >= entryTime + candleSeconds) {
-				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 10, "【戦略10】次足終値での強制決済");
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, strategyId, "【戦略" + strategyId + "】次足終値での強制決済");
 			}
 			return null; 
 		}
@@ -870,7 +981,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 		boolean isNewEntry = "NONE".equals(currentPos);
 		
-		if (isNewEntry && decision.getStrategyId() != 9 && decision.getStrategyId() != 92 && decision.getStrategyId() != 93 && decision.getStrategyId() != 94 && lastOrderTimeMap.get(key).equals(candle.getTime())) {
+		if (isNewEntry && decision.getStrategyId() != 9 && decision.getStrategyId() != 92 && decision.getStrategyId() != 922 && decision.getStrategyId() != 93 && decision.getStrategyId() != 94 && decision.getStrategyId() != 942 && lastOrderTimeMap.get(key).equals(candle.getTime())) {
 			return;
 		}
 
