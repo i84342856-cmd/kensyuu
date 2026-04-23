@@ -609,14 +609,14 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 	private double getHighestHigh(String key, int period, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key); if (hist == null || hist.size() < period + barsAgo) return Double.MAX_VALUE;
-		double highest = 0; int endIndex = hist.size() - barsAgo;
+		double highest = 0; int endIndex = hist.size() - 1 - barsAgo;
 		for (int i = 0; i < period; i++) highest = Math.max(highest, hist.get(endIndex - i).getHigh());
 		return highest;
 	}
 
 	private double getLowestLow(String key, int period, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key); if (hist == null || hist.size() < period + barsAgo) return 0.0;
-		double lowest = Double.MAX_VALUE; int endIndex = hist.size() - barsAgo;
+		double lowest = Double.MAX_VALUE; int endIndex = hist.size() - 1 - barsAgo;
 		for (int i = 0; i < period; i++) lowest = Math.min(lowest, hist.get(endIndex - i).getLow());
 		return lowest;
 	}
