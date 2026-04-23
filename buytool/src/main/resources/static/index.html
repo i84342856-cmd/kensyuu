@@ -172,8 +172,6 @@
 			<option value="M15">15分足</option>
 			<option value="M30">30分足</option>
 			<option value="H1">1時間足</option>
-			<option value="D1">日足</option>
-			<option value="W1">週足</option>
 		</select>
 		<button id="loadBtn">チャート表示</button>
 		<span style="margin-left:auto; color:#2962ff; font-weight:bold;" id="system-status">⏳ システム準備中...</span>
@@ -220,7 +218,7 @@
 			<div class="setting-group">
 				<h4>対象通貨</h4>
 				<label style="font-size:12px; margin-bottom:8px; display:block;">
-					<input type="checkbox" id="checkAllSymbols"> <b>全通貨 一括選択</b>
+					<input type="checkbox" id="checkAllSymbols" checked> <b>全通貨 一括選択</b>
 				</label>
 				<div class="checkbox-grid" id="ui-symbols"></div>
 			</div>
@@ -228,21 +226,13 @@
 			<div class="setting-group">
 				<h4>対象時間足</h4>
 				<label style="font-size:12px; margin-bottom:8px; display:block;">
-					<input type="checkbox" id="checkAllTimeframes"> <b>全時間足 一括選択</b>
+					<input type="checkbox" id="checkAllTimeframes" checked> <b>全時間足 一括選択</b>
 				</label>
 				<div class="checkbox-grid" id="ui-timeframes"></div>
 			</div>
 
 			<button id="applyMonitorBtn" class="batch-btn">✓ チェックした組み合わせを 稼働ON</button>
 			<button id="stopMonitorBtn" class="stop-btn">✗ チェックした組み合わせを 稼働OFF</button>
-
-			<hr style="border-color:#434651; margin: 20px 0;">
-
-			<h3 style="color:#e040fb;">⚙️ 戦略 ON/OFF 設定</h3>
-			<div class="setting-group">
-				<div class="checkbox-grid" id="ui-strategies" style="grid-template-columns: 1fr 1fr;">
-					</div>
-			</div>
 
 			<hr style="border-color:#434651; margin: 20px 0;">
 			<h3 style="color:#2962ff;">🤖 現在稼働中の監視Bot</h3>
@@ -252,25 +242,21 @@
 
 	<script>
 		const symbols = ["BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "BCH_JPY", "LTC_JPY", "MONA_JPY", "XLM_JPY", "BAT_JPY", "DOT_JPY", "LINK_JPY", "XYM_JPY", "MATIC_JPY", "SHIB_JPY", "DOGE_JPY", "ADA_JPY", "AVAX_JPY", "SAND_JPY", "CHZ_JPY", "FLR_JPY"];
-		const timeframes = ["M5", "M15", "M30", "H1", "D1", "W1"]; 
-		const strategies = ["1", "2", "3", "4", "5", "6", "9", "92", "93", "94", "10", "12", "22", "32", "42", "52", "62"];
+		const timeframes = ["M5", "M15", "M30", "H1"]; 
 
 		// --- 画面初期構築 ---
 		const symSelect = document.getElementById("symbolSelect");
 		const uiSymbols = document.getElementById("ui-symbols");
 		symbols.forEach(s => {
 			symSelect.add(new Option(s, s));
-			uiSymbols.innerHTML += `<label><input type="checkbox" class="sym-chk" value="${s}"> ${s.replace('_JPY','')}</label>`;
+			// デフォルトでチェックを入れる
+			uiSymbols.innerHTML += `<label><input type="checkbox" class="sym-chk" value="${s}" checked> ${s.replace('_JPY','')}</label>`;
 		});
 
 		const uiTimeframes = document.getElementById("ui-timeframes");
 		timeframes.forEach(tf => {
-			uiTimeframes.innerHTML += `<label><input type="checkbox" class="tf-chk" value="${tf}"> ${tf}</label>`;
-		});
-
-		const uiStrategies = document.getElementById("ui-strategies");
-		strategies.forEach(st => {
-			uiStrategies.innerHTML += `<label><input type="checkbox" class="st-chk" value="${st}" onchange="toggleStrategy('${st}', this.checked)"> 戦略 ${st}</label>`;
+			// デフォルトでチェックを入れる
+			uiTimeframes.innerHTML += `<label><input type="checkbox" class="tf-chk" value="${tf}" checked> ${tf}</label>`;
 		});
 
 		// --- 一括選択の挙動 ---
@@ -291,11 +277,15 @@
 				return;
 			}
 
+			// APIコールを並列処理して高速化
+			const promises = [];
 			for (const sym of selectedSyms) {
 				for (const tf of selectedTfs) {
-					await fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${isActive}`, {method: 'POST'});
+					promises.push(fetch(`/api/settings/monitor?symbol=${sym}&timeframe=${tf}&active=${isActive}`, {method: 'POST'}));
 				}
 			}
+			await Promise.all(promises);
+
 			loadMonitorSettings();
 			alert(`選択した組み合わせの監視を ${isActive ? 'ON' : 'OFF'} にしました。`);
 		}
@@ -321,21 +311,6 @@
 				}
 			}
 			if (activeCount === 0) activeBotsContainer.innerHTML = '<span style="color:#aaa;">現在稼働しているBotはありません</span>';
-		}
-
-		async function loadStrategySettings() {
-			const res = await fetch('/api/settings/strategy');
-			const settings = await res.json();
-			document.querySelectorAll('.st-chk').forEach(chk => {
-				const stId = chk.value;
-				if (settings[stId] !== undefined) {
-					chk.checked = settings[stId];
-				}
-			});
-		}
-
-		async function toggleStrategy(id, isActive) {
-			await fetch(`/api/settings/strategy?id=${id}&active=${isActive}`, {method: 'POST'});
 		}
 
 		// --- チャート関連 ---
@@ -513,7 +488,6 @@
 			stompClient.debug = null;
 			stompClient.connect({}, () => {
 				loadMonitorSettings();
-				loadStrategySettings();
 				loadChartData();
 				
 				stompClient.subscribe('/topic/trades', (msg) => {
