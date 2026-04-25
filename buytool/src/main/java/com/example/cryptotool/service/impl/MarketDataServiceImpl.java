@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.example.cryptotool.entity.TradeLog;
+import com.example.cryptotool.infrastructure.BitFlyerClient;
 import com.example.cryptotool.infrastructure.BitFlyerPrivateClient;
 import com.example.cryptotool.infrastructure.CryptoCompareClient;
 import com.example.cryptotool.model.TickData;
@@ -38,6 +39,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private final SimpMessagingTemplate messagingTemplate;
 	private final CryptoCompareClient cryptoCompareClient;
 	private final BitFlyerPrivateClient bitFlyerPrivateClient;
+	private final BitFlyerClient bitFlyerClient; // ★ダミー生成用に復元
 	private final TradeLogRepository tradeLogRepository;
 
 	private final Map<String, List<CandleData>> historyMap = new ConcurrentHashMap<>();
@@ -51,24 +53,29 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private final Map<String, Integer> entryStrategyMap = new ConcurrentHashMap<>();
 	private final Map<String, Long> entryCandleTimeMap = new ConcurrentHashMap<>();
 
+	private final Map<String, Double> targetPriceMap = new ConcurrentHashMap<>();
+	private final Map<String, Double> stopLossPriceMap = new ConcurrentHashMap<>();
+
 	private final boolean IS_DEMO_MODE = true;
 	private boolean isSystemReady = false;
 	private long lastTickReceivedTime = System.currentTimeMillis();
 
-	// 取引額設定
 	private final double TARGET_TRADE_AMOUNT = 400000.0;
 	private final double MAX_LOSS_JPY = -3000.0; 
 
-	// --- ボリンジャーバンド完全準拠・新戦略のON/OFF ---
 	private final Map<String, Boolean> strategySettings = new ConcurrentHashMap<>();
 	{
-		strategySettings.put("201", true); // 戦略201: バンドウォーク（順張り）
-		strategySettings.put("202", true); // 戦略202: 平均回帰（逆張り）
+		strategySettings.put("201", true); 
+		strategySettings.put("202", true); 
+		strategySettings.put("301", true); 
+		strategySettings.put("302", true); 
+		strategySettings.put("401", true); 
+		strategySettings.put("402", true); 
+		strategySettings.put("501", true); 
+		strategySettings.put("502", true); 
 	}
 
-	private boolean isTargetSymbol(Symbol s) {
-		return true; 
-	}
+	private boolean isTargetSymbol(Symbol s) { return true; }
 
 	@PostConstruct
 	public void init() {
@@ -81,8 +88,22 @@ public class MarketDataServiceImpl implements MarketDataService {
 					for (TimeFrame tf : TimeFrame.values()) {
 						if (tf == TimeFrame.M1) continue; 
 						String key = s.name() + "_" + tf.name();
-						List<CandleData> fetched = cryptoCompareClient.getHistoricalCandles(s, tf, 1000);
-						if (fetched == null) fetched = new ArrayList<>();
+						List<CandleData> fetched = null;
+						
+						try {
+							if (cryptoCompareClient != null) {
+								fetched = cryptoCompareClient.getHistoricalCandles(s, tf, 1000);
+							}
+						} catch (Exception e) {
+							log.warn("履歴データ取得APIエラー ({}): {}", key, e.getMessage());
+						}
+						
+						// ★バグ修正: データ飢餓（Data Starvation）を防ぐウォームアップフォールバック
+						if (fetched == null || fetched.isEmpty()) {
+							log.info("⚠️ 過去データが取得できなかったため、{} の初期データ(300本)を生成します", key);
+							fetched = generateFallbackCandles(s, tf);
+						}
+
 						if (!fetched.isEmpty()) {
 							CandleData last = fetched.remove(fetched.size() - 1);
 							currentCandleMap.put(key, last);
@@ -112,6 +133,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 							entryCandleTimeMap.put(key, 0L);
 						}
 						lastOrderTimeMap.put(key, 0L);
+						
+						// ※ 注意: UIでONにしない限り false (監視無効) になります
 						monitorSettings.put(key, hasPosition);
 						Thread.sleep(1000);
 					}
@@ -124,9 +147,35 @@ public class MarketDataServiceImpl implements MarketDataService {
 		});
 	}
 
-	public void updateMonitorSetting(String symbol, String timeframe, boolean active) {
-		monitorSettings.put(symbol + "_" + timeframe, active);
+	// ★バグ修正: 200MA等を即時計算可能にするための事前充填データ作成
+	private List<CandleData> generateFallbackCandles(Symbol symbol, TimeFrame tf) {
+		List<CandleData> initialCandles = new ArrayList<>();
+		double basePrice = 5000000; 
+		try {
+			if (bitFlyerClient != null) {
+				basePrice = bitFlyerClient.getMidPrice(symbol);
+			}
+		} catch (Exception e) {}
+		
+		long currentTime = System.currentTimeMillis() / 1000;
+		long currentPeriod = (currentTime / tf.getSeconds()) * tf.getSeconds();
+
+		double lastClose = basePrice;
+		for (int i = 300; i >= 0; i--) { // 長期インジケーター用に300本確保
+			long time = currentPeriod - ((long) i * tf.getSeconds());
+			double open = lastClose; 
+			double randPercent = (Math.random() - 0.5) * 0.001; 
+			double close = open * (1.0 + randPercent);
+			double high = Math.max(open, close) * (1.0 + Math.random() * 0.0005);
+			double low = Math.min(open, close) * (1.0 - Math.random() * 0.0005); 
+			initialCandles.add(ChartInitResponse.CandleData.builder()
+					.time(time).open(open).high(high).low(low).close(close).volume(100.0).build());
+			lastClose = close;
+		}
+		return initialCandles;
 	}
+
+	public void updateMonitorSetting(String symbol, String timeframe, boolean active) { monitorSettings.put(symbol + "_" + timeframe, active); }
 	public Map<String, Boolean> getMonitorSettings() { return monitorSettings; }
 	public void updateStrategySetting(String id, boolean active) { strategySettings.put(id, active); }
 	public Map<String, Boolean> getStrategySettings() { return strategySettings; }
@@ -140,6 +189,24 @@ public class MarketDataServiceImpl implements MarketDataService {
 		RealtimeUpdateDto.SignalType type;
 		int strategyId;
 		String reason;
+		double targetPrice;
+		double stopLossPrice;
+		
+		public SignalDecision(RealtimeUpdateDto.SignalType type, int strategyId, String reason) {
+			this.type = type;
+			this.strategyId = strategyId;
+			this.reason = reason;
+			this.targetPrice = 0.0;
+			this.stopLossPrice = 0.0;
+		}
+	}
+
+	@Data
+	@AllArgsConstructor
+	private static class SwingPoint {
+		int index;
+		double price;
+		boolean isHigh;
 	}
 
 	@Override
@@ -227,8 +294,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double upper2 = sma + 2 * std; double lower2 = sma - 2 * std;
 		double upper2Prev = smaPrev + 2 * stdPrev; double lower2Prev = smaPrev - 2 * stdPrev;
 		
-		double percentB = (current.getClose() - lower2) / (upper2 - lower2);
-		double bandWidth = (upper2 - lower2) / sma;
+		double percentB = (upper2 - lower2 == 0) ? 0 : (current.getClose() - lower2) / (upper2 - lower2);
+		double bandWidth = (sma > 0) ? (upper2 - lower2) / sma : 0;
 		
 		double[] adx = getADX(key, 14, 0);
 		double[] adxPrev = getADX(key, 14, 1);
@@ -237,13 +304,12 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double[] macdPrev = getMACD(key, 1);
 		double[] ichi = getIchimoku(key, 0);
 
-		// --- 戦略201: バンドウォーク（順張り LONG） ---
 		if (strategySettings.getOrDefault("201", false)) {
 			boolean breakUpper2 = getPastCandleClose(key, 1) <= upper2Prev && current.getClose() > upper2;
 			boolean isAdxTrending = adx[0] >= 25 && adx[0] > adxPrev[0];
 			boolean isVolMomentum = percentB >= 0.8 && mfi >= 80;
 			boolean isMacdExpanding = macd[2] > 0 && macd[2] > macdPrev[2];
-			boolean isSmaUp = (sma - smaPrev) / smaPrev > 0.0003;
+			boolean isSmaUp = smaPrev > 0 && (sma - smaPrev) / smaPrev > 0.0003;
 			boolean isSqueezeToExpansion = checkSqueeze(key, 50, bandWidth, 0);
 			boolean isLowerBandExpandingDown = lower2 < lower2Prev;
 			boolean isBullishCloud = current.getClose() > Math.max(ichi[2], ichi[3]) && ichi[0] > ichi[1];
@@ -253,18 +319,97 @@ public class MarketDataServiceImpl implements MarketDataService {
 			}
 		}
 
-		// --- 戦略202: 平均回帰（逆張り LONG） ---
 		if (strategySettings.getOrDefault("202", false)) {
 			boolean touchLower2 = current.getLow() <= lower2;
 			boolean isRangeMarket = adx[0] < 25 && adx[0] <= adxPrev[0];
 			boolean isMacdBullishDiv = isBullishDivergence(key, current, macd[2]);
-			boolean isSmaFlat = Math.abs((sma - smaPrev) / smaPrev) < 0.0001;
+			boolean isSmaFlat = smaPrev > 0 && Math.abs((sma - smaPrev) / smaPrev) < 0.0001;
 			boolean isWBottom = isWBottomFormation(key, current, lower2);
 
 			if ((touchLower2 || isWBottom) && isRangeMarket && isMacdBullishDiv && isSmaFlat) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 202, "【戦略202:平均回帰】-2σ到達+レンジ内ダイバージェンス(逆張り買い)");
 			}
 		}
+
+		if (strategySettings.getOrDefault("301", false)) {
+			List<SwingPoint> swings = getRecentSwings(key, 5);
+			if (swings.size() == 5 && swings.get(4).isHigh && !swings.get(3).isHigh && swings.get(2).isHigh && !swings.get(1).isHigh && swings.get(0).isHigh) {
+				double e1 = swings.get(0).getPrice();
+				double e2 = swings.get(1).getPrice();
+				double e3 = swings.get(2).getPrice();
+				double e4 = swings.get(3).getPrice();
+				double e5 = swings.get(4).getPrice();
+
+				double maxHigh = Math.max(e1, Math.max(e3, e5));
+				double minHigh = Math.min(e1, Math.min(e3, e5));
+				double avgHigh = (e1 + e3 + e5) / 3.0;
+
+				boolean isResistanceHorizontal = (maxHigh - minHigh) / avgHigh <= 0.015;
+				boolean isSupportAscending = e4 > e2;
+				boolean isBreakout = current.getClose() > maxHigh * 1.01;
+				
+				double volSma20 = getVolumeSMA(key, 20, 1);
+				boolean isVolumeSurge = volSma20 > 0 && current.getVolume() >= volSma20 * 1.5;
+				
+				double sma50 = getPastMA(key, 50, 0);
+				double sma200 = getPastMA(key, 200, 0);
+				boolean isUptrend = sma50 > sma200;
+
+				if (isResistanceHorizontal && isSupportAscending && isBreakout && isVolumeSurge && isUptrend) {
+					double tp = current.getClose() + (avgHigh - e2); 
+					double sl = e4 * 0.99; 
+					return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 301, "【戦略301】アセトラ上抜けブレイクアウト(買い)", tp, sl);
+				}
+			}
+		}
+
+		if (strategySettings.getOrDefault("401", false)) {
+			double sma50 = getPastMA(key, 50, 0);
+			double ma50Prev = getPastMA(key, 50, 1);
+			double sma200 = getPastMA(key, 200, 0);
+			double ma5 = getPastMA(key, 5, 0);
+			double ma5Prev = getPastMA(key, 5, 1);
+
+			boolean isPerfectOrderLong = (sma > sma50) && (sma50 > sma200);
+			boolean isMomentumUp = (sma > smaPrev) && (sma50 > ma50Prev);
+			boolean isBreakoutUp = getPastCandleClose(key, 1) <= ma5Prev && current.getClose() > ma5;
+			
+			boolean isAdxTrending = adx[0] >= 25;
+			double volSma20 = getVolumeSMA(key, 20, 1);
+			boolean isVolumeSurge = volSma20 > 0 && current.getVolume() >= volSma20 * 1.5;
+
+			if (isPerfectOrderLong && isMomentumUp && isBreakoutUp && isAdxTrending && isVolumeSurge) {
+				double atr = getATR(key, 14, 0);
+				double sl = current.getClose() - 2 * atr;
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 401, "【戦略401】最適化PO順張り+クオンツフィルター(買い)", 0.0, sl);
+			}
+		}
+
+		if (strategySettings.getOrDefault("501", false)) {
+			double ema5 = getPastEMA(key, 5, 0);
+			double ema20 = getPastEMA(key, 20, 0);
+			double ema50 = getPastEMA(key, 50, 0);
+			double ema200 = getPastEMA(key, 200, 0);
+			
+			double ema5Prev = getPastEMA(key, 5, 1);
+			double ema20Prev = getPastEMA(key, 20, 1);
+			double ema50Prev = getPastEMA(key, 50, 1);
+			double ema200Prev = getPastEMA(key, 200, 1);
+
+			boolean isPerfectOrder = (ema5 > ema20) && (ema20 > ema50) && (ema50 > ema200);
+			boolean isAllUp = (ema5 > ema5Prev) && (ema20 > ema20Prev) && (ema50 > ema50Prev) && (ema200 > ema200Prev);
+			boolean isAdxTrending = adx[0] >= 25;
+			boolean isBreakout = getPastCandleClose(key, 1) <= ema5Prev && current.getClose() > ema5;
+			
+			double volSma20 = getVolumeSMA(key, 20, 1);
+			boolean isVolumeSurge = volSma20 > 0 && current.getVolume() >= volSma20 * 1.5;
+
+			if (isPerfectOrder && isAllUp && isAdxTrending && isBreakout && isVolumeSurge) {
+				double sl = current.getClose() - 1.5 * getATR(key, 14, 0);
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 501, "【戦略501】最適化PO(EMA)+ADX+Vol+Kelly(買い)", 0.0, sl);
+			}
+		}
+
 		return null;
 	}
 
@@ -277,8 +422,8 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double upper2 = sma + 2 * std; double lower2 = sma - 2 * std;
 		double upper2Prev = smaPrev + 2 * stdPrev; double lower2Prev = smaPrev - 2 * stdPrev;
 		
-		double percentB = (current.getClose() - lower2) / (upper2 - lower2);
-		double bandWidth = (upper2 - lower2) / sma;
+		double percentB = (upper2 - lower2 == 0) ? 0 : (current.getClose() - lower2) / (upper2 - lower2);
+		double bandWidth = (sma > 0) ? (upper2 - lower2) / sma : 0;
 		
 		double[] adx = getADX(key, 14, 0);
 		double[] adxPrev = getADX(key, 14, 1);
@@ -287,13 +432,12 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double[] macdPrev = getMACD(key, 1);
 		double[] ichi = getIchimoku(key, 0);
 
-		// --- 戦略201: バンドウォーク（順張り SHORT） ---
 		if (strategySettings.getOrDefault("201", false)) {
 			boolean breakLower2 = getPastCandleClose(key, 1) >= lower2Prev && current.getClose() < lower2;
 			boolean isAdxTrending = adx[0] >= 25 && adx[0] > adxPrev[0];
 			boolean isVolMomentum = percentB <= 0.2 && mfi <= 20;
 			boolean isMacdExpandingDown = macd[2] < 0 && macd[2] < macdPrev[2];
-			boolean isSmaDown = (sma - smaPrev) / smaPrev < -0.0003;
+			boolean isSmaDown = smaPrev > 0 && (sma - smaPrev) / smaPrev < -0.0003;
 			boolean isSqueezeToExpansion = checkSqueeze(key, 50, bandWidth, 0);
 			boolean isUpperBandExpandingUp = upper2 > upper2Prev;
 			boolean isBearishCloud = current.getClose() < Math.min(ichi[2], ichi[3]) && ichi[0] < ichi[1];
@@ -303,18 +447,97 @@ public class MarketDataServiceImpl implements MarketDataService {
 			}
 		}
 
-		// --- 戦略202: 平均回帰（逆張り SHORT） ---
 		if (strategySettings.getOrDefault("202", false)) {
 			boolean touchUpper2 = current.getHigh() >= upper2;
 			boolean isRangeMarket = adx[0] < 25 && adx[0] <= adxPrev[0];
 			boolean isMacdBearishDiv = isBearishDivergence(key, current, macd[2]);
-			boolean isSmaFlat = Math.abs((sma - smaPrev) / smaPrev) < 0.0001;
+			boolean isSmaFlat = smaPrev > 0 && Math.abs((sma - smaPrev) / smaPrev) < 0.0001;
 			boolean isMTop = isMTopFormation(key, current, upper2);
 
 			if ((touchUpper2 || isMTop) && isRangeMarket && isMacdBearishDiv && isSmaFlat) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 202, "【戦略202:平均回帰】+2σ到達+レンジ内ダイバージェンス(逆張り売り)");
 			}
 		}
+
+		if (strategySettings.getOrDefault("302", false)) {
+			List<SwingPoint> swings = getRecentSwings(key, 5);
+			if (swings.size() == 5 && !swings.get(4).isHigh && swings.get(3).isHigh && !swings.get(2).isHigh && swings.get(1).isHigh && !swings.get(0).isHigh) {
+				double e1 = swings.get(0).getPrice();
+				double e2 = swings.get(1).getPrice();
+				double e3 = swings.get(2).getPrice();
+				double e4 = swings.get(3).getPrice();
+				double e5 = swings.get(4).getPrice();
+
+				double maxLow = Math.max(e1, Math.max(e3, e5));
+				double minLow = Math.min(e1, Math.min(e3, e5));
+				double avgLow = (e1 + e3 + e5) / 3.0;
+
+				boolean isSupportHorizontal = (maxLow - minLow) / avgLow <= 0.015;
+				boolean isResistanceDescending = e4 < e2;
+				boolean isBreakout = current.getClose() < minLow * 0.99;
+				
+				double volSma20 = getVolumeSMA(key, 20, 1);
+				boolean isVolumeSurge = volSma20 > 0 && current.getVolume() >= volSma20 * 1.5;
+				
+				double sma50 = getPastMA(key, 50, 0);
+				double sma200 = getPastMA(key, 200, 0);
+				boolean isDowntrend = sma50 < sma200;
+
+				if (isSupportHorizontal && isResistanceDescending && isBreakout && isVolumeSurge && isDowntrend) {
+					double tp = current.getClose() - (e2 - avgLow); 
+					double sl = e4 * 1.01; 
+					return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 302, "【戦略302】ディセトラ下抜けブレイクアウト(売り)", tp, sl);
+				}
+			}
+		}
+
+		if (strategySettings.getOrDefault("402", false)) {
+			double sma50 = getPastMA(key, 50, 0);
+			double ma50Prev = getPastMA(key, 50, 1);
+			double sma200 = getPastMA(key, 200, 0);
+			double ma5 = getPastMA(key, 5, 0);
+			double ma5Prev = getPastMA(key, 5, 1);
+
+			boolean isPerfectOrderShort = (sma < sma50) && (sma50 < sma200);
+			boolean isMomentumDown = (sma < smaPrev) && (sma50 < ma50Prev);
+			boolean isBreakoutDown = getPastCandleClose(key, 1) >= ma5Prev && current.getClose() < ma5;
+			
+			boolean isAdxTrending = adx[0] >= 25;
+			double volSma20 = getVolumeSMA(key, 20, 1);
+			boolean isVolumeSurge = volSma20 > 0 && current.getVolume() >= volSma20 * 1.5;
+
+			if (isPerfectOrderShort && isMomentumDown && isBreakoutDown && isAdxTrending && isVolumeSurge) {
+				double atr = getATR(key, 14, 0);
+				double sl = current.getClose() + 2 * atr;
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 402, "【戦略402】最適化PO順張り+クオンツフィルター(売り)", 0.0, sl);
+			}
+		}
+
+		if (strategySettings.getOrDefault("502", false)) {
+			double ema5 = getPastEMA(key, 5, 0);
+			double ema20 = getPastEMA(key, 20, 0);
+			double ema50 = getPastEMA(key, 50, 0);
+			double ema200 = getPastEMA(key, 200, 0);
+			
+			double ema5Prev = getPastEMA(key, 5, 1);
+			double ema20Prev = getPastEMA(key, 20, 1);
+			double ema50Prev = getPastEMA(key, 50, 1);
+			double ema200Prev = getPastEMA(key, 200, 1);
+
+			boolean isPerfectOrder = (ema5 < ema20) && (ema20 < ema50) && (ema50 < ema200);
+			boolean isAllDown = (ema5 < ema5Prev) && (ema20 < ema20Prev) && (ema50 < ema50Prev) && (ema200 < ema200Prev);
+			boolean isAdxTrending = adx[0] >= 25;
+			boolean isBreakout = getPastCandleClose(key, 1) >= ema5Prev && current.getClose() < ema5;
+			
+			double volSma20 = getVolumeSMA(key, 20, 1);
+			boolean isVolumeSurge = volSma20 > 0 && current.getVolume() >= volSma20 * 1.5;
+
+			if (isPerfectOrder && isAllDown && isAdxTrending && isBreakout && isVolumeSurge) {
+				double sl = current.getClose() + 1.5 * getATR(key, 14, 0);
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 502, "【戦略502】最適化PO(EMA)+ADX+Vol+Kelly(売り)", 0.0, sl);
+			}
+		}
+
 		return null;
 	}
 
@@ -330,17 +553,51 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double sma = getPastMA(key, 20, 0);
 		double std = getStdDev(key, 20, 0);
 
-		if (strategyId == 201) { // バンドウォーク LONG のエグジット
+		if (strategyId == 201) { 
 			double lower2 = sma - 2 * std;
 			double lower2Prev = getPastMA(key, 20, 1) - 2 * getStdDev(key, 20, 1);
 			double upper1 = sma + std;
-			// 逆側バンドが反転したか、または+1σゾーンを割った時
 			if (lower2 > lower2Prev || current.getClose() < upper1) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 201, "【戦略201利確】モメンタム枯渇(+1σ割れ or バンド反転)");
 			}
-		} else if (strategyId == 202) { // 平均回帰 LONG のエグジット
+		} else if (strategyId == 202) { 
 			if (current.getClose() >= sma) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 202, "【戦略202利確】中心線(20SMA)へ平均回帰完了");
+			}
+		} else if (strategyId == 301) {
+			double tp = targetPriceMap.getOrDefault(key, 0.0);
+			double sl = stopLossPriceMap.getOrDefault(key, 0.0);
+			if (tp > 0 && current.getClose() >= tp) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 301, "【戦略301利確】目標価格(TP)到達");
+			if (sl > 0 && current.getClose() <= sl) return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 301, "【戦略301損切】ストップロス(SL)到達");
+		} else if (strategyId == 401) {
+			double atr = getATR(key, 14, 0);
+			double currentSl = stopLossPriceMap.getOrDefault(key, 0.0);
+			double newSl = current.getClose() - 2 * atr;
+			if (newSl > currentSl) {
+				stopLossPriceMap.put(key, newSl);
+				currentSl = newSl;
+			}
+			if (current.getClose() <= currentSl) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 401, "【戦略401利確/損切】トレイリングストップ(ATR)到達");
+			}
+		} else if (strategyId == 501) {
+			double atr = getATR(key, 14, 0);
+			double currentSl = stopLossPriceMap.getOrDefault(key, 0.0);
+			double newSl = current.getClose() - 1.5 * atr;
+			
+			if (newSl > currentSl || currentSl == 0.0) {
+				stopLossPriceMap.put(key, newSl);
+				currentSl = newSl;
+			}
+			
+			if (current.getClose() <= currentSl) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 501, "【戦略501利確/損切】トレイリングストップ(1.5*ATR)到達");
+			}
+
+			double[] macd = getMACD(key, 0);
+			double[] macdPrev = getMACD(key, 1);
+			if (macdPrev[0] >= macdPrev[1] && macd[0] < macd[1]) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.SELL, 501, "【戦略501利確】MACDデッドクロス(モメンタム喪失)");
 			}
 		}
 		return null;
@@ -358,25 +615,147 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double sma = getPastMA(key, 20, 0);
 		double std = getStdDev(key, 20, 0);
 
-		if (strategyId == 201) { // バンドウォーク SHORT のエグジット
+		if (strategyId == 201) { 
 			double upper2 = sma + 2 * std;
 			double upper2Prev = getPastMA(key, 20, 1) + 2 * getStdDev(key, 20, 1);
 			double lower1 = sma - std;
-			// 逆側バンドが反転したか、または-1σゾーンを割った時
 			if (upper2 < upper2Prev || current.getClose() > lower1) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 201, "【戦略201利確】モメンタム枯渇(-1σ超え or バンド反転)");
 			}
-		} else if (strategyId == 202) { // 平均回帰 SHORT のエグジット
+		} else if (strategyId == 202) { 
 			if (current.getClose() <= sma) {
 				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 202, "【戦略202利確】中心線(20SMA)へ平均回帰完了");
+			}
+		} else if (strategyId == 302) {
+			double tp = targetPriceMap.getOrDefault(key, 0.0);
+			double sl = stopLossPriceMap.getOrDefault(key, 0.0);
+			if (tp > 0 && current.getClose() <= tp) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 302, "【戦略302利確】目標価格(TP)到達");
+			if (sl > 0 && current.getClose() >= sl) return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 302, "【戦略302損切】ストップロス(SL)到達");
+		} else if (strategyId == 402) {
+			double atr = getATR(key, 14, 0);
+			double currentSl = stopLossPriceMap.getOrDefault(key, Double.MAX_VALUE);
+			if (currentSl == 0.0) currentSl = Double.MAX_VALUE; 
+			double newSl = current.getClose() + 2 * atr;
+			if (newSl < currentSl) {
+				stopLossPriceMap.put(key, newSl);
+				currentSl = newSl;
+			}
+			if (current.getClose() >= currentSl) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 402, "【戦略402利確/損切】トレイリングストップ(ATR)到達");
+			}
+		} else if (strategyId == 502) {
+			double atr = getATR(key, 14, 0);
+			double currentSl = stopLossPriceMap.getOrDefault(key, Double.MAX_VALUE);
+			if (currentSl == 0.0) currentSl = Double.MAX_VALUE;
+			double newSl = current.getClose() + 1.5 * atr;
+			
+			if (newSl < currentSl) {
+				stopLossPriceMap.put(key, newSl);
+				currentSl = newSl;
+			}
+			
+			if (current.getClose() >= currentSl) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 502, "【戦略502利確/損切】トレイリングストップ(1.5*ATR)到達");
+			}
+
+			double[] macd = getMACD(key, 0);
+			double[] macdPrev = getMACD(key, 1);
+			if (macdPrev[0] <= macdPrev[1] && macd[0] > macd[1]) {
+				return new SignalDecision(RealtimeUpdateDto.SignalType.BUY, 502, "【戦略502利確】MACDゴールデンクロス(モメンタム喪失)");
 			}
 		}
 		return null;
 	}
 
-	// ==========================================
-	// テクニカル指標・構造計算メソッド（新規追加）
-	// ==========================================
+	private double calculateKellyLotSize(double price, double atr) {
+		if (price <= 0 || atr <= 0) return 0.001;
+		double assumedAccountBalance = 1000000.0; 
+		double winRate = 0.40;
+		double riskReward = 2.0;
+		double kellyFraction = winRate - ((1.0 - winRate) / riskReward); 
+		double halfKelly = kellyFraction / 2.0; 
+		double maxRiskAmount = assumedAccountBalance * halfKelly; 
+		
+		double stopLossDistance = 1.5 * atr; 
+		if (stopLossDistance == 0) stopLossDistance = price * 0.01; 
+		double size = maxRiskAmount / stopLossDistance;
+		return Math.round(size * 10000.0) / 10000.0;
+	}
+
+	private double getPastEMA(String key, int period, int barsAgo) {
+		List<CandleData> hist = historyMap.get(key);
+		if (hist == null || hist.size() < 100) return 0.0;
+		int endIndex = hist.size() - 1 - barsAgo;
+		if (barsAgo == 0) {
+			CandleData cur = currentCandleMap.get(key);
+			List<Double> prices = getPrices(hist, endIndex, 100);
+			if (cur != null) prices.add(cur.getClose());
+			return calculateEMA(prices, period);
+		} else {
+			List<Double> prices = getPrices(hist, endIndex, 100);
+			return calculateEMA(prices, period);
+		}
+	}
+
+	private double getATR(String key, int period, int barsAgo) {
+		List<CandleData> hist = historyMap.get(key);
+		if (hist == null || hist.size() < period + barsAgo + 1) return 0.0;
+		int endIndex = hist.size() - 1 - barsAgo;
+		double trSum = 0;
+		for (int i = endIndex - period + 1; i <= endIndex; i++) {
+			CandleData curr = hist.get(i);
+			CandleData prev = hist.get(i - 1);
+			double tr = Math.max(curr.getHigh() - curr.getLow(), 
+						Math.max(Math.abs(curr.getHigh() - prev.getClose()), 
+								 Math.abs(curr.getLow() - prev.getClose())));
+			trSum += tr;
+		}
+		return trSum / period; 
+	}
+
+	private List<SwingPoint> getRecentSwings(String key, int count) {
+		List<CandleData> hist = historyMap.get(key);
+		List<SwingPoint> swings = new ArrayList<>();
+		if (hist == null || hist.size() < 20) return swings;
+		int lookback = 5; 
+		Boolean lastFoundWasHigh = null;
+
+		for (int i = hist.size() - lookback - 1; i >= lookback; i--) {
+			double currentHigh = hist.get(i).getHigh();
+			double currentLow = hist.get(i).getLow();
+			boolean isHigh = true, isLow = true;
+			for (int j = 1; j <= lookback; j++) {
+				if (hist.get(i - j).getHigh() >= currentHigh || hist.get(i + j).getHigh() >= currentHigh) isHigh = false;
+				if (hist.get(i - j).getLow() <= currentLow || hist.get(i + j).getLow() <= currentLow) isLow = false;
+			}
+			
+			if (isHigh && isLow) continue;
+			
+			if (lastFoundWasHigh == null) {
+				if (isHigh) { swings.add(0, new SwingPoint(i, currentHigh, true)); lastFoundWasHigh = true; } 
+				else if (isLow) { swings.add(0, new SwingPoint(i, currentLow, false)); lastFoundWasHigh = false; }
+			} else {
+				if (lastFoundWasHigh && isLow) { swings.add(0, new SwingPoint(i, currentLow, false)); lastFoundWasHigh = false; } 
+				else if (!lastFoundWasHigh && isHigh) { swings.add(0, new SwingPoint(i, currentHigh, true)); lastFoundWasHigh = true; }
+			}
+			if (swings.size() == count) break;
+		}
+		return swings;
+	}
+
+	private double getVolumeSMA(String key, int period, int barsAgo) {
+		List<CandleData> hist = historyMap.get(key);
+		if (hist == null || hist.size() < period + barsAgo) return 0.0;
+		double sum = 0;
+		if (barsAgo == 0) {
+			CandleData cur = currentCandleMap.get(key);
+			if (cur != null) sum += cur.getVolume();
+			for (int i = 1; i < period; i++) sum += hist.get(hist.size() - i).getVolume();
+		} else {
+			for (int i = 0; i < period; i++) sum += hist.get(hist.size() - barsAgo - i).getVolume();
+		}
+		return sum / period;
+	}
 
 	private double[] getADX(String key, int period, int barsAgo) {
 		List<CandleData> hist = historyMap.get(key);
@@ -391,9 +770,9 @@ public class MarketDataServiceImpl implements MarketDataService {
 			if (i == endIndex - period * 2) { smoothedTR = tr; smoothedPDM = pdm; smoothedNDM = ndm; } 
 			else { smoothedTR = smoothedTR - (smoothedTR / period) + tr; smoothedPDM = smoothedPDM - (smoothedPDM / period) + pdm; smoothedNDM = smoothedNDM - (smoothedNDM / period) + ndm; }
 		}
-		double pdi = 100 * (smoothedPDM / smoothedTR);
-		double ndi = 100 * (smoothedNDM / smoothedTR);
-		double dx = 100 * Math.abs(pdi - ndi) / (pdi + ndi == 0 ? 1 : pdi + ndi);
+		double pdi = smoothedTR == 0 ? 0 : 100 * (smoothedPDM / smoothedTR);
+		double ndi = smoothedTR == 0 ? 0 : 100 * (smoothedNDM / smoothedTR);
+		double dx = (pdi + ndi == 0) ? 0 : 100 * Math.abs(pdi - ndi) / (pdi + ndi);
 		return new double[]{dx, pdi, ndi}; 
 	}
 
@@ -455,8 +834,11 @@ public class MarketDataServiceImpl implements MarketDataService {
 	private boolean checkSqueeze(String key, int lookback, double currentBandWidth, int barsAgo) {
 		double minBw = Double.MAX_VALUE;
 		for (int i = 1; i <= lookback; i++) {
-			double bw = (4 * getStdDev(key, 20, barsAgo + i)) / getPastMA(key, 20, barsAgo + i);
-			if (bw < minBw) minBw = bw;
+			double sma = getPastMA(key, 20, barsAgo + i);
+			if (sma > 0) {
+				double bw = (4 * getStdDev(key, 20, barsAgo + i)) / sma;
+				if (bw < minBw) minBw = bw;
+			}
 		}
 		return currentBandWidth <= minBw * 1.5; 
 	}
@@ -513,10 +895,6 @@ public class MarketDataServiceImpl implements MarketDataService {
 		return current.getLow() <= lowest * 1.001 && current.getClose() > currentLower2 && lowest <= pastLower2;
 	}
 
-	// ==========================================
-	// 既存ユーティリティ
-	// ==========================================
-
 	private double calculateLotSize(double price) {
 		if (price <= 0) return 0.001;
 		return Math.round((TARGET_TRADE_AMOUNT / price) * 10000.0) / 10000.0;
@@ -538,7 +916,7 @@ public class MarketDataServiceImpl implements MarketDataService {
 		double sumSq = 0;
 		if (barsAgo == 0) {
 			CandleData cur = currentCandleMap.get(key);
-			sumSq += Math.pow(cur.getClose() - sma, 2);
+			if (cur != null) sumSq += Math.pow(cur.getClose() - sma, 2);
 			for (int i = 1; i < period; i++) sumSq += Math.pow(hist.get(hist.size() - i).getClose() - sma, 2);
 		} else {
 			for (int i = 0; i < period; i++) sumSq += Math.pow(hist.get(hist.size() - barsAgo - i).getClose() - sma, 2);
@@ -554,7 +932,12 @@ public class MarketDataServiceImpl implements MarketDataService {
 
 		String newPos = currentPos; String actionType = ""; double tradeSize = 0.001;
 		if (isNewEntry) {
-			tradeSize = calculateLotSize(candle.getClose());
+			if (decision.getStrategyId() == 501 || decision.getStrategyId() == 502) {
+				double atr = getATR(key, 14, 0);
+				tradeSize = calculateKellyLotSize(candle.getClose(), atr);
+			} else {
+				tradeSize = calculateLotSize(candle.getClose());
+			}
 			newPos = decision.getType() == RealtimeUpdateDto.SignalType.BUY ? "LONG" : "SHORT";
 			actionType = (newPos.equals("LONG") ? "🟢 [LONG] " : "🔴 [SHORT] ") + decision.getReason();
 		} else {
@@ -576,16 +959,21 @@ public class MarketDataServiceImpl implements MarketDataService {
 		if (!"NONE".equals(newPos)) {
 			entryPriceMap.put(key, candle.getClose()); positionSizeMap.put(key, tradeSize);
 			entryStrategyMap.put(key, decision.getStrategyId()); entryCandleTimeMap.put(key, candle.getTime());
+			
+			targetPriceMap.put(key, decision.getTargetPrice());
+			stopLossPriceMap.put(key, decision.getStopLossPrice());
 		} else {
 			entryPriceMap.remove(key); positionSizeMap.remove(key);
 			entryStrategyMap.remove(key); entryCandleTimeMap.remove(key);
+			targetPriceMap.remove(key); stopLossPriceMap.remove(key);
 		}
 	}
 
 	private double calculateCurrentMA(String key, int period) {
 		List<CandleData> hist = historyMap.get(key); CandleData cur = currentCandleMap.get(key);
 		if (hist == null || hist.size() < period - 1) return 0;
-		double sum = cur.getClose();
+		double sum = 0;
+		if (cur != null) sum += cur.getClose();
 		for (int i = 1; i < period; i++) sum += hist.get(hist.size() - i).getClose();
 		return sum / period;
 	}
@@ -608,16 +996,44 @@ public class MarketDataServiceImpl implements MarketDataService {
 	}
 
 	private double getHighestHigh(String key, int period, int barsAgo) {
-		List<CandleData> hist = historyMap.get(key); if (hist == null || hist.size() < period + barsAgo) return Double.MAX_VALUE;
-		double highest = 0; int endIndex = hist.size() - 1 - barsAgo;
-		for (int i = 0; i < period; i++) highest = Math.max(highest, hist.get(endIndex - i).getHigh());
+		List<CandleData> hist = historyMap.get(key); 
+		if (hist == null || hist.size() < period + barsAgo) return Double.MAX_VALUE;
+		
+		double highest = 0;
+		if (barsAgo == 0) {
+			CandleData cur = currentCandleMap.get(key);
+			if (cur != null) highest = cur.getHigh();
+			int endIndex = hist.size() - 1;
+			for (int i = 0; i < period - 1; i++) {
+				highest = Math.max(highest, hist.get(endIndex - i).getHigh());
+			}
+		} else {
+			int endIndex = hist.size() - barsAgo;
+			for (int i = 0; i < period; i++) {
+				highest = Math.max(highest, hist.get(endIndex - i).getHigh());
+			}
+		}
 		return highest;
 	}
 
 	private double getLowestLow(String key, int period, int barsAgo) {
-		List<CandleData> hist = historyMap.get(key); if (hist == null || hist.size() < period + barsAgo) return 0.0;
-		double lowest = Double.MAX_VALUE; int endIndex = hist.size() - 1 - barsAgo;
-		for (int i = 0; i < period; i++) lowest = Math.min(lowest, hist.get(endIndex - i).getLow());
+		List<CandleData> hist = historyMap.get(key); 
+		if (hist == null || hist.size() < period + barsAgo) return 0.0;
+		
+		double lowest = Double.MAX_VALUE;
+		if (barsAgo == 0) {
+			CandleData cur = currentCandleMap.get(key);
+			if (cur != null) lowest = cur.getLow();
+			int endIndex = hist.size() - 1;
+			for (int i = 0; i < period - 1; i++) {
+				lowest = Math.min(lowest, hist.get(endIndex - i).getLow());
+			}
+		} else {
+			int endIndex = hist.size() - barsAgo;
+			for (int i = 0; i < period; i++) {
+				lowest = Math.min(lowest, hist.get(endIndex - i).getLow());
+			}
+		}
 		return lowest;
 	}
 
