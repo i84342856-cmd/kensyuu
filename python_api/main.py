@@ -15,7 +15,6 @@ def predict_xgboost(features: List[float]):
     
     return random.uniform(0.0, 1.0)
     
-
 # HMMによる市場レジーム判定（モック）
 @app.post("/predict/hmm")
 def predict_hmm(observations: List[float]):
