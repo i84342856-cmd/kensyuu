@@ -46,6 +46,7 @@
 		}
 
 		select,
+		input,
 		button {
 			padding: 8px 12px;
 			border-radius: 4px;
@@ -124,7 +125,6 @@
 			margin-bottom: 2px;
 		}
 
-		/* サイドバー設定用スタイル */
 		.setting-group {
 			margin-bottom: 15px;
 			padding: 10px;
@@ -160,6 +160,16 @@
 		.batch-btn:hover { background: #00e676; }
 		.stop-btn { background: #ef5350; width: 100%; padding: 10px; margin-top: 5px; }
 		.stop-btn:hover { background: #ff8a80; }
+
+		.ai-panel {
+			border: 1px solid #2962ff;
+			background: rgba(41, 98, 255, 0.1);
+		}
+		.ai-value {
+			font-size: 18px;
+			font-weight: bold;
+			color: #fff;
+		}
 	</style>
 </head>
 
@@ -193,9 +203,60 @@
 			
 			<div id="chart-container"></div>
 			
+			<div class="history-container" style="margin-top: 20px;">
+				<h3 style="margin-top:0; color:#ffb74d;">🧪 バックテスト・シミュレーター</h3>
+				<div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+					<div>
+						<label style="display:block; font-size:12px; font-weight:bold; margin-bottom:5px;">通貨ペア</label>
+						<select id="btSymbol" style="padding:8px; border-radius:4px; border:1px solid #434651; background:#1e222d; color:#d1d4dc;">
+							<option value="BTC_JPY">BTC_JPY</option>
+							<option value="FX_BTC_JPY">FX_BTC_JPY</option>
+							<option value="ETH_JPY">ETH_JPY</option>
+							<option value="XRP_JPY">XRP_JPY</option>
+						</select>
+					</div>
+					<div>
+						<label style="display:block; font-size:12px; font-weight:bold; margin-bottom:5px;">時間足</label>
+						<select id="btTimeframe" style="padding:8px; border-radius:4px; border:1px solid #434651; background:#1e222d; color:#d1d4dc;">
+							<option value="M5">5分足</option>
+							<option value="M15">15分足</option>
+							<option value="M30">30分足</option>
+							<option value="H1">1時間足</option>
+							<option value="H4">4時間足</option>
+						</select>
+					</div>
+					<div>
+						<label style="display:block; font-size:12px; font-weight:bold; margin-bottom:5px;">戦略ID</label>
+						<select id="btStrategyId" style="padding:8px; border-radius:4px; border:1px solid #434651; background:#1e222d; color:#d1d4dc;">
+							<option value="1">1 (MAクロス)</option>
+							<option value="200">200 (BBウォーク)</option>
+							<option value="300">300 (ブレイクアウト)</option>
+							<option value="400">400 (SMA PO)</option>
+							<option value="500" selected>500 (EMA PO)</option>
+							<option value="600">600 (BBKCスクイーズ)</option>
+							<option value="700">700 (XGBoost)</option>
+						</select>
+					</div>
+					<div>
+						<label style="display:block; font-size:12px; font-weight:bold; margin-bottom:5px;">取得本数</label>
+						<input type="number" id="btCandles" value="2000" style="padding:8px; border-radius:4px; border:1px solid #434651; background:#1e222d; color:#d1d4dc; width:100px;">
+					</div>
+					<div>
+						<button type="button" onclick="runBacktestUI()" style="padding:9px 20px;">▶ 実行</button>
+					</div>
+				</div>
+
+				<div id="backtestResultArea" style="display:none; margin-top:20px; border-top:1px solid #434651; padding-top:15px;">
+					<h4 style="color:#2962ff; margin-top:0;">📊 シミュレーション結果</h4>
+					<table style="width:100%; border-collapse: collapse;">
+						<tbody id="btResultTable"></tbody>
+					</table>
+				</div>
+			</div>
+
 			<div class="history-container">
-				<a href="/api/trades/download" class="btn btn-primary">CSVダウンロード</a>
-				<h3>売買履歴 <span style="float:right">合計損益: <span id="total-pnl">0</span> JPY</span></h3>
+				<a href="/api/trades/download" class="btn btn-primary" style="display:inline-block; margin-bottom:10px; background:#2962ff; color:white; padding:8px 12px; text-decoration:none; border-radius:4px;">CSVダウンロード</a>
+				<h3 style="margin-top:0;">売買履歴 <span style="float:right; font-size:16px;">合計損益: <span id="total-pnl">0</span> JPY</span></h3>
 				<table id="trade-history">
 					<thead>
 						<tr>
@@ -203,7 +264,8 @@
 							<th>通貨</th>
 							<th>足</th>
 							<th>売買</th>
-							<th>戦略・根拠</th> <th>価格</th>
+							<th>戦略・根拠</th> 
+							<th>価格</th>
 							<th>数量</th>
 							<th>約定金額</th>
 							<th>損益</th>
@@ -213,8 +275,20 @@
 				</table>
 			</div>
 		</div>
-
+		
 		<div class="side-col">
+			<div class="setting-group ai-panel">
+				<h4 style="color:#2962ff; margin-bottom: 5px;">🧠 AI 推論ステータス</h4>
+				<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+					<span style="font-size: 13px;">AI方向予測:</span>
+					<span class="ai-value" id="ui-ai-prob">-- %</span>
+				</div>
+				<div style="display: flex; justify-content: space-between;">
+					<span style="font-size: 13px;">市場レジーム(HMM):</span>
+					<span class="ai-value" id="ui-ai-regime" style="color: #ffb74d; font-size: 14px;">--</span>
+				</div>
+			</div>
+
 			<h3 style="margin-top:0; color:#26a69a;">📊 自動売買 監視設定</h3>
 			
 			<div class="setting-group">
@@ -241,7 +315,7 @@
 			<h3 style="color:#e040fb;">⚙️ 戦略 ON/OFF 設定</h3>
 			<div class="setting-group">
 				<div class="checkbox-grid" id="ui-strategies" style="grid-template-columns: 1fr 1fr;">
-					</div>
+				</div>
 			</div>
 
 			<hr style="border-color:#434651; margin: 20px 0;">
@@ -253,7 +327,7 @@
 	<script>
 		const symbols = ["BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "BCH_JPY", "LTC_JPY", "MONA_JPY", "XLM_JPY", "BAT_JPY", "DOT_JPY", "LINK_JPY", "XYM_JPY", "MATIC_JPY", "SHIB_JPY", "DOGE_JPY", "ADA_JPY", "AVAX_JPY", "SAND_JPY", "CHZ_JPY", "FLR_JPY"];
 		const timeframes = ["M5", "M15", "M30", "H1", "D1", "W1"]; 
-		const strategies = ["1", "2", "3", "4", "5", "6", "9", "92", "93", "94", "10", "12", "22", "32", "42", "52", "62"];
+		const strategies = ["1", "200", "300", "400", "500", "600", "700"];
 
 		// --- 画面初期構築 ---
 		const symSelect = document.getElementById("symbolSelect");
@@ -330,6 +404,8 @@
 				const stId = chk.value;
 				if (settings[stId] !== undefined) {
 					chk.checked = settings[stId];
+				} else {
+					chk.checked = true; // デフォルトON
 				}
 			});
 		}
@@ -413,6 +489,13 @@
 		async function loadChartData() {
 			const sym = document.getElementById('symbolSelect').value;
 			const tf = document.getElementById('timeframeSelect').value;
+			
+			// ▼▼▼ 追加：チャート切り替え時にAIパネルをリセット ▼▼▼
+			    document.getElementById('ui-ai-prob').innerText = '-- %';
+			    document.getElementById('ui-ai-regime').innerText = '--';
+			    document.getElementById('ui-ai-prob').style.color = '#fff';
+			    // ▲▲▲ ここまで ▲▲▲
+				
 			try {
 				const res = await fetch(`/api/chart/init?symbol=${sym}&timeframe=${tf}`);
 				const data = await res.json();
@@ -438,6 +521,27 @@
 					if (d.currentMa50 > 0) ma50Series.update({ time: jstTime, value: d.currentMa50 });
 					if (d.currentMa75 > 0) ma75Series.update({ time: jstTime, value: d.currentMa75 });
 					if (d.currentMa100 > 0) ma100Series.update({ time: jstTime, value: d.currentMa100 });
+
+					// ▼ AI推論ステータスの画面更新 ▼
+					// ▼ AI推論ステータスの画面更新 ▼
+					if (d.aiUpProbability !== undefined && d.aiUpProbability !== null) {
+					    let probElem = document.getElementById('ui-ai-prob');
+					    
+					    if (d.aiUpProbability >= 0.5) {
+					        // 上昇確率が50%以上の場合は「上昇」として表示
+					        let probPercent = (d.aiUpProbability * 100).toFixed(1);
+					        probElem.innerText = '上昇 ' + probPercent + ' %';
+					        probElem.style.color = d.aiUpProbability > 0.6 ? '#26a69a' : '#fff'; // 60%超えで緑色
+					    } else {
+					        // 上昇確率が50%未満の場合は、反転させて「下落」として表示
+					        let downProbPercent = ((1.0 - d.aiUpProbability) * 100).toFixed(1);
+					        probElem.innerText = '下落 ' + downProbPercent + ' %';
+					        probElem.style.color = d.aiUpProbability < 0.4 ? '#ef5350' : '#fff'; // 下落60%超え(upが40%未満)で赤色
+					    }
+					}
+					if (d.marketRegime) {
+						document.getElementById('ui-ai-regime').innerText = d.marketRegime;
+					}
 				});
 				
 				fetchHistory();
@@ -460,7 +564,41 @@
 				updateChartMarkers(allTradesHistory);
 			} catch (e) {console.error(e);}
 		}
+		
+		// --- バックテスト機能 ---
+		async function runBacktestUI() {
+		    const symbol = document.getElementById('btSymbol').value;
+		    const timeframe = document.getElementById('btTimeframe').value;
+		    const strategyId = document.getElementById('btStrategyId').value;
+		    const candles = document.getElementById('btCandles').value;
 
+		    const resultArea = document.getElementById('backtestResultArea');
+		    const tableBody = document.getElementById('btResultTable');
+		    
+		    resultArea.style.display = 'block';
+		    tableBody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:#aaa;">過去データを分析中... APIの取得により数秒かかる場合があります。</td></tr>';
+
+		    try {
+		        const response = await fetch(`/api/backtest/run?symbol=${symbol}&timeframe=${timeframe}&strategyId=${strategyId}&candles=${candles}`);
+		        if (!response.ok) throw new Error('API実行エラー');
+		        const data = await response.json();
+
+		        tableBody.innerHTML = `
+		            <tr><th style="width:30%; background:#1e222d; padding:10px; border-bottom:1px solid #434651;">対象戦略</th><td style="padding:10px; border-bottom:1px solid #434651;"><strong>${data.strategyName}</strong> (ID:${strategyId})</td></tr>
+		            <tr><th style="background:#1e222d; padding:10px; border-bottom:1px solid #434651;">総取引数</th><td style="padding:10px; border-bottom:1px solid #434651;">${data.totalTrades} 回</td></tr>
+		            <tr><th style="background:#1e222d; padding:10px; border-bottom:1px solid #434651;">勝敗</th><td style="padding:10px; border-bottom:1px solid #434651;"><span class="buy">${data.winningTrades}勝</span> / <span class="sell">${data.losingTrades}敗</span></td></tr>
+		            <tr><th style="background:#1e222d; padding:10px; border-bottom:1px solid #434651;">勝率</th><td style="padding:10px; border-bottom:1px solid #434651;"><span style="font-size:1.2em; font-weight:bold; color:#2962ff;">${data.winRate}%</span></td></tr>
+		            <tr><th style="background:#1e222d; padding:10px; border-bottom:1px solid #434651;">純損益</th><td style="padding:10px; border-bottom:1px solid #434651;"><strong class="${data.totalProfit >= 0 ? 'buy' : 'sell'}" style="font-size: 1.2em;">${data.totalProfit.toLocaleString()} 円</strong></td></tr>
+		            <tr><th style="background:#1e222d; color:#ef5350; padding:10px; border-bottom:1px solid #434651;">最大ドローダウン</th><td class="sell" style="padding:10px; border-bottom:1px solid #434651;">-${data.maxDrawdown.toLocaleString()} 円</td></tr>
+		            <tr><th style="background:#1e222d; padding:10px; border-bottom:1px solid #434651;">最終残高</th><td style="padding:10px; border-bottom:1px solid #434651;">${data.finalBalance.toLocaleString()} 円 <span style="font-size:11px; color:#aaa;">(初期: 1,000,000円)</span></td></tr>
+		        `;
+		    } catch (error) {
+		        console.error('Backtest error:', error);
+		        tableBody.innerHTML = '<tr><td colspan="2" class="sell" style="text-align:center; padding:10px;">シミュレーションに失敗しました。CryptoCompareのAPI制限か、パラメータを確認してください。</td></tr>';
+		    }
+		}
+
+		// --- 履歴テーブル描画 ---
 		function addTradeRow(t) {
 			const tbody = document.getElementById('trade-history').tBodies[0];
 			const row = tbody.insertRow(0);

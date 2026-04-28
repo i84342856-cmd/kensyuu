@@ -11,9 +11,10 @@ public enum TimeFrame {
     M15("15分足", 900),
     M30("30分足", 1800),
     H1("1時間足", 3600),
+    H4("4時間足", 14400), // ★これを追加
     D1("日足", 86400),
     W1("週足", 604800);
 
     private final String description;
-    private final int seconds; // 秒数換算（集計ロジックで使用）
+    private final int seconds; 
 }

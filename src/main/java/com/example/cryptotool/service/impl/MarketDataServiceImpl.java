@@ -1,15 +1,22 @@
 package com.example.cryptotool.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.example.cryptotool.entity.TradeLog;
+import com.example.cryptotool.infrastructure.BitFlyerClient;
+import com.example.cryptotool.infrastructure.CryptoCompareClient;
+import com.example.cryptotool.infrastructure.MlPredictionClient;
 import com.example.cryptotool.model.MarketKey;
 import com.example.cryptotool.model.SignalDecision;
 import com.example.cryptotool.model.TickData;
@@ -21,156 +28,302 @@ import com.example.cryptotool.model.response.RealtimeUpdateDto;
 import com.example.cryptotool.repository.TradeLogRepository;
 import com.example.cryptotool.service.MarketDataService;
 import com.example.cryptotool.service.core.MarketDataStore;
-import com.example.cryptotool.service.execution.TradeExecutionService;
+import com.example.cryptotool.service.core.MarketRegimeService;
 import com.example.cryptotool.service.strategy.TradingStrategy;
 
-/**
- * 【司令塔】データ受信と各サービスへの指示出しのみを担当
- */
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class MarketDataServiceImpl implements MarketDataService {
 
-    // @Slf4j の代わりに手動でロガーを定義（IDEの自動インポート暴走を防止）
-    private static final Logger log = LoggerFactory.getLogger(MarketDataServiceImpl.class);
-
-    private final MarketDataStore dataStore;
-    private final TradeExecutionService executionService;
-    private final List<TradingStrategy> strategies;
-    private final TradeLogRepository tradeLogRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CryptoCompareClient cryptoCompareClient;
+    private final BitFlyerClient bitFlyerClient; 
+    private final TradeLogRepository tradeLogRepository;
 
-    private final Map<MarketKey, Boolean> monitorSettings = new ConcurrentHashMap<>();
+    // ★新アーキテクチャの要：データストアと戦略リスト
+    private final MarketDataStore dataStore;
+    private final List<TradingStrategy> strategies;
+    
+    private final MlPredictionClient mlClient;
+    private final MarketRegimeService regimeService;
+
+    private final Map<MarketKey, Long> lastOrderTimeMap = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> monitorSettings = new ConcurrentHashMap<>();
+
+    // ポジション管理
+    private final Map<MarketKey, String> positionMap = new ConcurrentHashMap<>();
+    private final Map<MarketKey, Double> entryPriceMap = new ConcurrentHashMap<>();
+    private final Map<MarketKey, Double> positionSizeMap = new ConcurrentHashMap<>();
+    private final Map<MarketKey, Integer> entryStrategyMap = new ConcurrentHashMap<>();
+    private final Map<MarketKey, Long> entryCandleTimeMap = new ConcurrentHashMap<>();
+
+    private boolean isSystemReady = false;
+    private long lastTickReceivedTime = System.currentTimeMillis();
+
+    private final double TARGET_TRADE_AMOUNT = 400000.0;
+
     private final Map<String, Boolean> strategySettings = new ConcurrentHashMap<>();
 
-    // @RequiredArgsConstructor の代わりに手動でコンストラクタを定義（初期化エラーを防止）
-    public MarketDataServiceImpl(
-            MarketDataStore dataStore,
-            TradeExecutionService executionService,
-            List<TradingStrategy> strategies,
-            TradeLogRepository tradeLogRepository,
-            SimpMessagingTemplate messagingTemplate) {
-        this.dataStore = dataStore;
-        this.executionService = executionService;
-        this.strategies = strategies;
-        this.tradeLogRepository = tradeLogRepository;
-        this.messagingTemplate = messagingTemplate;
+    private boolean isTargetSymbol(Symbol s) { return s == Symbol.BTC_JPY || s == Symbol.FX_BTC_JPY; }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void init() {
+        log.info("🚀 システム起動: 非同期初期化を開始します...");
+        addSystemLog("SYSTEM BOOTING", "システム初期化中...");
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                for (Symbol s : Symbol.values()) {
+                    if (!isTargetSymbol(s)) continue;
+                    for (TimeFrame tf : TimeFrame.values()) {
+                        if (tf == TimeFrame.M1) continue; 
+                        
+                        MarketKey key = new MarketKey(s, tf);
+                        List<CandleData> fetched = null;
+                        
+                        try {
+                        	// 起動時の初期データは50本だけ取得してAPI制限を回避する
+                        	fetched = cryptoCompareClient.getHistoricalCandles(s, tf, 50);
+                        } catch (Exception e) {
+                            log.warn("履歴データ取得APIエラー ({}): {}", key, e.getMessage());
+                        }
+                        
+                        if (fetched == null || fetched.isEmpty()) {
+                            fetched = generateFallbackCandles(s, tf);
+                        }
+
+                        if (!fetched.isEmpty()) {
+                            CandleData last = fetched.remove(fetched.size() - 1);
+                            dataStore.getCurrentCandleMap().put(key, last);
+                        }
+                        dataStore.getHistoryMap().put(key, fetched);
+
+                        // =========================================================
+                        // ★ポジション復元処理（アプリ再起動時にもここから引き継ぐ）
+                        // =========================================================
+                        Optional<TradeLog> optLatestLog = tradeLogRepository.findFirstBySymbolAndTimeframeOrderByTimeDesc(s.name(), tf.name());
+                        boolean hasPosition = false;
+                        if (optLatestLog.isPresent()) {
+                            TradeLog latestLog = optLatestLog.get();
+                            if (!latestLog.getMessage().contains("決済") && !latestLog.getMessage().contains("SYSTEM")) {
+                                String restoredPos = latestLog.getMessage().contains("[LONG]") ? "LONG" : "SHORT";
+                                positionMap.put(key, restoredPos);
+                                entryPriceMap.put(key, latestLog.getPrice());
+                                positionSizeMap.put(key, latestLog.getSize());
+                                entryStrategyMap.put(key, latestLog.getStrategy());
+                                long candleStart = (latestLog.getTime() / tf.getSeconds()) * tf.getSeconds();
+                                entryCandleTimeMap.put(key, candleStart);
+                                hasPosition = true;
+                                log.info("♻️ 過去のポジションを復元: {} {} (戦略:{}, Price:{})", key, restoredPos, latestLog.getStrategy(), latestLog.getPrice());
+                            }
+                        }
+                        if (!hasPosition) {
+                            positionMap.put(key, "NONE");
+                            entryPriceMap.put(key, 0.0);
+                            positionSizeMap.put(key, 0.0);
+                            entryStrategyMap.put(key, 0);
+                            entryCandleTimeMap.put(key, 0L);
+                        }
+                        lastOrderTimeMap.put(key, 0L);
+                        monitorSettings.put(key.toString(), true);
+                        Thread.sleep(3000);
+                    }
+                }
+                isSystemReady = true;
+                addSystemLog("SYSTEM READY", "全データの準備が完了しました。");
+            } catch (Exception e) {
+                log.error("初期化エラー", e);
+            }
+        });
     }
 
-    @Override
-    public void processRealtimeTick(TickData tick) {
-        if (!dataStore.isReady()) return;
-
-        for (TimeFrame tf : TimeFrame.values()) {
-            if (tf == TimeFrame.M1) continue; 
-
-            MarketKey key = new MarketKey(tick.getSymbol(), tf);
-            
-            CandleData current = dataStore.updateCandle(tick, tf);
-            if (current == null) continue;
-
-            if (monitorSettings.getOrDefault(key, false)) {
-                checkStrategiesAndExecute(key, current);
-            }
-
-            sendChartUpdate(key, current);
+    private List<CandleData> generateFallbackCandles(Symbol symbol, TimeFrame tf) {
+        List<CandleData> initialCandles = new ArrayList<>();
+        double basePrice = 5000000; 
+        long currentPeriod = (System.currentTimeMillis() / 1000 / tf.getSeconds()) * tf.getSeconds();
+        double lastClose = basePrice;
+        for (int i = 300; i >= 0; i--) { 
+            long time = currentPeriod - ((long) i * tf.getSeconds());
+            double open = lastClose; 
+            double close = open * (1.0 + (Math.random() - 0.5) * 0.001);
+            double high = Math.max(open, close) * (1.0 + Math.random() * 0.0005);
+            double low = Math.min(open, close) * (1.0 - Math.random() * 0.0005); 
+            initialCandles.add(ChartInitResponse.CandleData.builder()
+                    .time(time).open(open).high(high).low(low).close(close).volume(100.0).build());
+            lastClose = close;
         }
+        return initialCandles;
     }
 
-    private void checkStrategiesAndExecute(MarketKey key, CandleData current) {
-        String currentPosition = executionService.getCurrentPosition(key);
-        double entryPrice = executionService.getEntryPrice(key);
-        long entryTime = executionService.getEntryTime(key);
-
-        for (TradingStrategy strategy : strategies) {
-            if (!strategySettings.getOrDefault(String.valueOf(strategy.getStrategyId()), true)) {
-                continue;
-            }
-
-            SignalDecision decision = null;
-
-            if ("NONE".equals(currentPosition)) {
-                decision = strategy.checkEntry(key, current, dataStore);
-            } else {
-                decision = strategy.checkExit(key, current, dataStore, currentPosition, entryPrice, entryTime);
-            }
-
-            if (decision != null && decision.type() != RealtimeUpdateDto.SignalType.NONE) {
-                executionService.executeTrade(key, decision, current);
-                break; 
-            }
-        }
-    }
-
-    private void sendChartUpdate(MarketKey key, CandleData current) {
-        String topicStr = key.symbol().name() + "_" + key.timeFrame().name();
-        messagingTemplate.convertAndSend("/topic/" + topicStr,
-                RealtimeUpdateDto.builder()
-                        .currentCandle(current)
-                        .currentMa5(dataStore.calculateCurrentMA(key, 5))
-                        .currentMa10(dataStore.calculateCurrentMA(key, 10))
-                        .currentMa25(dataStore.calculateCurrentMA(key, 25))
-                        .currentMa50(dataStore.calculateCurrentMA(key, 50))
-                        .currentMa75(dataStore.calculateCurrentMA(key, 75))
-                        .currentMa100(dataStore.calculateCurrentMA(key, 100))
-                        .signal(RealtimeUpdateDto.SignalType.NONE) 
-                        .build());
-    }
+    public void updateMonitorSetting(String symbol, String timeframe, boolean active) { monitorSettings.put(symbol + "_" + timeframe, active); }
+    public Map<String, Boolean> getMonitorSettings() { return monitorSettings; }
+    public void updateStrategySetting(String id, boolean active) { strategySettings.put(id, active); }
+    public Map<String, Boolean> getStrategySettings() { return strategySettings; }
+    public List<TradeLog> getTradeHistory() { return tradeLogRepository.findTop100ByOrderByTimeDesc(); }
+    @Override public List<TradeLog> getAllTradeHistory() { return tradeLogRepository.findAllByOrderByTimeDesc(); }
+    @Override public List<TradeLog> getTradeLogsForChart(Symbol symbol, TimeFrame tf) { return tradeLogRepository.findAllBySymbolAndTimeframeOrderByTimeAsc(symbol.name(), tf.name()); }
 
     @Override
     public ChartInitResponse getInitialData(Symbol symbol, TimeFrame timeFrame) {
         MarketKey key = new MarketKey(symbol, timeFrame);
-        List<CandleData> candles = dataStore.getHistoryClone(key);
-        CandleData current = dataStore.getCurrentCandle(key);
+        List<CandleData> candles = new ArrayList<>(dataStore.getHistoryMap().getOrDefault(key, new ArrayList<>()));
+        CandleData current = dataStore.getCurrentCandleMap().get(key);
         if (current != null) candles.add(current);
-
-        return ChartInitResponse.builder()
-                .candles(candles)
-                .ma5(dataStore.calculateHistoricalMA(candles, 5))
-                .ma10(dataStore.calculateHistoricalMA(candles, 10))
-                .ma25(dataStore.calculateHistoricalMA(candles, 25))
-                .ma50(dataStore.calculateHistoricalMA(candles, 50))
-                .ma75(dataStore.calculateHistoricalMA(candles, 75))
-                .ma100(dataStore.calculateHistoricalMA(candles, 100))
-                .build();
+        return ChartInitResponse.builder().candles(candles)
+                .ma5(calculateHistoricalMA(candles, 5)).ma10(calculateHistoricalMA(candles, 10))
+                .ma25(calculateHistoricalMA(candles, 25)).ma50(calculateHistoricalMA(candles, 50))
+                .ma75(calculateHistoricalMA(candles, 75)).ma100(calculateHistoricalMA(candles, 100)).build();
     }
 
     @Override
-    public void updateMonitorSetting(String symbol, String timeframe, boolean active) {
-        MarketKey key = new MarketKey(Symbol.valueOf(symbol), TimeFrame.valueOf(timeframe));
-        monitorSettings.put(key, active);
-        log.info("設定変更: {} -> 監視{}", key, active ? "ON" : "OFF");
+    public void processRealtimeTick(TickData tick) {
+        this.lastTickReceivedTime = System.currentTimeMillis();
+        if (!isSystemReady || !isTargetSymbol(tick.getSymbol())) return;
+        for (TimeFrame tf : TimeFrame.values()) {
+            if (tf == TimeFrame.M1) continue; 
+            updateAndCheckSignal(tick, tf);
+        }
     }
 
-    @Override
-    public Map<String, Boolean> getMonitorSettings() {
-        Map<String, Boolean> stringMap = new ConcurrentHashMap<>();
-        monitorSettings.forEach((k, v) -> stringMap.put(k.symbol().name() + "_" + k.timeFrame().name(), v));
-        return stringMap;
+    @Scheduled(fixedRate = 60000)
+    public void watchdogTimer() {
+        if (System.currentTimeMillis() - lastTickReceivedTime > 300000) {
+            log.error("🚨 5分間データ未受信。強制再接続します...");
+            lastTickReceivedTime = System.currentTimeMillis();
+        }
     }
 
-    @Override
-    public Map<String, Boolean> getStrategySettings() {
-        return strategySettings;
+    private void updateAndCheckSignal(TickData tick, TimeFrame tf) {
+        Symbol symbol = tick.getSymbol();
+        MarketKey key = new MarketKey(symbol, tf);
+        long candleStart = (tick.getTimestamp() / tf.getSeconds()) * tf.getSeconds();
+        double price = tick.getPrice();
+
+        CandleData current = dataStore.getCurrentCandleMap().get(key);
+        if (current == null || current.getTime() < candleStart) {
+            if (current != null) dataStore.getHistoryMap().get(key).add(current);
+            current = CandleData.builder().time(candleStart).open(price).high(price).low(price).close(price).build();
+            dataStore.getCurrentCandleMap().put(key, current);
+        } else {
+            current.setClose(price);
+            current.setHigh(Math.max(current.getHigh(), price));
+            current.setLow(Math.min(current.getLow(), price));
+        }
+
+        SignalDecision decision = null;
+        if (monitorSettings.getOrDefault(key.toString(), false)) {
+            decision = checkSignal(key, current);
+            if (decision != null && decision.type() != RealtimeUpdateDto.SignalType.NONE) {
+                executeTrade(key, decision, current);
+            }
+        }
+
+     // --- ▼ 画面表示用にAI推論結果を取得 ▼ ---
+        double aiProb = 0.5;
+        String regimeName = "UNKNOWN";
+        try {
+            // ダミーの全0ではなく、実際の市場データから特徴量を抽出してPythonに送る
+            double rsi = dataStore.getRSI(key, 14, 0);
+            double stdDev = dataStore.getStdDev(key, 20, 0);
+            double maDev = dataStore.getMaDeviationRate(key, 20, 0);
+            
+            // Pythonへ送る配列（XGBoostStrategyのbuildFeatureVectorと項目を合わせるとより正確です）
+            double[] features = new double[]{ rsi, stdDev, maDev, 0, 0, 0, 0, 0, 0 };
+            
+            aiProb = mlClient.getPredictionProbability(features);
+            regimeName = regimeService.detectRegime(key, dataStore).name();
+        } catch (Exception e) {
+            log.warn("画面表示用のAI推論でエラー: {}", e.getMessage());
+        }
+        // --- ▲ ここまで ▲ ---
+
+        // WebSocketでフロントエンドにデータを送信
+        messagingTemplate.convertAndSend("/topic/" + key.toString(), RealtimeUpdateDto.builder()
+                .currentCandle(current)
+                .currentMa5(dataStore.getPastMA(key, 5, 0))
+                .currentMa25(dataStore.getPastMA(key, 25, 0))
+                .signal(decision != null ? decision.type() : RealtimeUpdateDto.SignalType.NONE)
+                .aiUpProbability(aiProb)           // ★追加：AIの予測確率
+                .marketRegime(regimeName)          // ★追加：HMMのレジーム
+                .build());
     }
 
-    @Override
-    public void updateStrategySetting(String id, boolean active) {
-        strategySettings.put(id, active);
-        log.info("戦略設定変更: ID{} -> {}", id, active ? "ON" : "OFF");
+    private SignalDecision checkSignal(MarketKey key, CandleData current) {
+        String currentPosition = positionMap.getOrDefault(key, "NONE");
+
+        // ★全戦略を自動評価するダイナミックループ
+        for (TradingStrategy strategy : strategies) {
+            if (!strategySettings.getOrDefault(String.valueOf(strategy.getStrategyId()), true)) continue;
+
+            if ("NONE".equals(currentPosition)) {
+                SignalDecision decision = strategy.checkEntry(key, current, dataStore);
+                if (decision != null) return decision;
+            } else {
+                int entryStrat = entryStrategyMap.getOrDefault(key, 0);
+                // 自分がエントリーした戦略系統（例:501なら500）の時だけ決済を評価する
+                if (entryStrat == strategy.getStrategyId() || (entryStrat / 100 * 100) == strategy.getStrategyId()) {
+                    double entryPrice = entryPriceMap.getOrDefault(key, 0.0);
+                    long entryTime = entryCandleTimeMap.getOrDefault(key, 0L);
+                    SignalDecision decision = strategy.checkExit(key, current, dataStore, currentPosition, entryPrice, entryTime);
+                    if (decision != null) return decision;
+                }
+            }
+        }
+        return null;
     }
 
-    @Override
-    public List<TradeLog> getTradeHistory() {
-        return tradeLogRepository.findTop100ByOrderByTimeDesc();
+    private void executeTrade(MarketKey key, SignalDecision decision, CandleData candle) {
+        String currentPos = positionMap.getOrDefault(key, "NONE");
+        boolean isNewEntry = "NONE".equals(currentPos);
+        if (isNewEntry && lastOrderTimeMap.getOrDefault(key, 0L).equals(candle.getTime())) return;
+
+        String newPos = currentPos; String actionType = ""; double tradeSize = 0.001;
+        if (isNewEntry) {
+            tradeSize = Math.round((TARGET_TRADE_AMOUNT / candle.getClose()) * 10000.0) / 10000.0;
+            newPos = decision.type() == RealtimeUpdateDto.SignalType.BUY ? "LONG" : "SHORT";
+            actionType = (newPos.equals("LONG") ? "🟢 [LONG] " : "🔴 [SHORT] ") + decision.reason();
+        } else {
+            tradeSize = positionSizeMap.getOrDefault(key, 0.001);
+            if ("LONG".equals(currentPos) && decision.type() == RealtimeUpdateDto.SignalType.SELL) { newPos = "NONE"; actionType = "✅ [LONG決済] " + decision.reason(); }
+            else if ("SHORT".equals(currentPos) && decision.type() == RealtimeUpdateDto.SignalType.BUY) { newPos = "NONE"; actionType = "✅ [SHORT決済] " + decision.reason(); }
+            else return;
+        }
+
+        TradeLog logTrade = new TradeLog();
+        logTrade.setTime(System.currentTimeMillis() / 1000); logTrade.setSymbol(key.symbol().name()); logTrade.setTimeframe(key.timeFrame().name());
+        logTrade.setSide(decision.type().name()); logTrade.setPrice(candle.getClose()); logTrade.setSize(tradeSize);
+        logTrade.setMessage(actionType); logTrade.setStrategy(decision.strategyId());
+
+        tradeLogRepository.save(logTrade);
+        messagingTemplate.convertAndSend("/topic/trades", logTrade);
+
+        lastOrderTimeMap.put(key, candle.getTime()); positionMap.put(key, newPos);
+        if (!"NONE".equals(newPos)) {
+            entryPriceMap.put(key, candle.getClose()); positionSizeMap.put(key, tradeSize);
+            entryStrategyMap.put(key, decision.strategyId()); entryCandleTimeMap.put(key, candle.getTime());
+        } else {
+            entryPriceMap.remove(key); positionSizeMap.remove(key);
+            entryStrategyMap.remove(key); entryCandleTimeMap.remove(key);
+        }
     }
 
-    @Override
-    public List<TradeLog> getAllTradeHistory() {
-        return tradeLogRepository.findAllByOrderByTimeDesc();
+    private List<ChartInitResponse.MovingAverageData> calculateHistoricalMA(List<CandleData> candles, int period) {
+        List<ChartInitResponse.MovingAverageData> res = new ArrayList<>();
+        for (int i = period - 1; i < candles.size(); i++) {
+            double sum = 0; for (int j = 0; j < period; j++) sum += candles.get(i - j).getClose();
+            res.add(new ChartInitResponse.MovingAverageData(candles.get(i).getTime(), sum / period));
+        }
+        return res;
     }
 
-    @Override
-    public List<TradeLog> getTradeLogsForChart(Symbol symbol, TimeFrame timeFrame) {
-        return tradeLogRepository.findAllBySymbolAndTimeframeOrderByTimeAsc(symbol.name(), timeFrame.name());
+    private void addSystemLog(String status, String message) {
+        TradeLog systemLog = new TradeLog();
+        systemLog.setTime(System.currentTimeMillis() / 1000); systemLog.setSymbol("SYSTEM"); systemLog.setTimeframe("-");
+        systemLog.setSide(status); systemLog.setPrice(0.0); systemLog.setSize(0.0);
+        systemLog.setMessage(message); systemLog.setStrategy(0);
+        tradeLogRepository.save(systemLog); messagingTemplate.convertAndSend("/topic/trades", systemLog);
     }
 }

@@ -69,7 +69,7 @@ public class MarketDataStore {
                             historyMap.put(key, new ArrayList<>());
                         }
                         // API制限回避のウェイト
-                        Thread.sleep(1000);
+                        Thread.sleep(3000);
                     }
                 }
                 isSystemReady = true;
@@ -395,5 +395,68 @@ public class MarketDataStore {
             if (swings.size() == count) break;
         }
         return swings;
+    }
+    
+ // =========================================================================
+    // バックテスト専用：過去データの直接注入メソッド（本番データは汚染しません）
+    // =========================================================================
+    public void addCandleForBacktest(MarketKey key, CandleData candle) {
+        historyMap.computeIfAbsent(key, k -> new java.util.ArrayList<>()).add(candle);
+        currentCandleMap.put(key, candle);
+    }
+    
+ // =========================================================================
+    // 外部アクセス用のGetterメソッド
+    // =========================================================================
+    public java.util.Map<com.example.cryptotool.model.MarketKey, java.util.List<com.example.cryptotool.model.response.ChartInitResponse.CandleData>> getHistoryMap() {
+        return historyMap;
+    }
+
+    public java.util.Map<com.example.cryptotool.model.MarketKey, com.example.cryptotool.model.response.ChartInitResponse.CandleData> getCurrentCandleMap() {
+        return currentCandleMap;
+    }
+    
+ // =========================================================================
+    // 追加: 平均出来高の取得
+    // =========================================================================
+    public double getAverageVolume(MarketKey key, int periods) {
+        // 修正: 内部の historyMap から直接データを取得する
+        List<CandleData> history = historyMap.get(key); 
+        
+        if (history == null || history.size() < periods) return 0.0;
+
+        double totalVolume = 0.0;
+        int startIndex = history.size() - periods;
+        for (int i = startIndex; i < history.size(); i++) {
+            totalVolume += history.get(i).getVolume();
+        }
+        return totalVolume / periods;
+    }
+    
+ // --- MarketDataStore.java に以下のメソッドを追加 ---
+
+    public double getRSI(MarketKey key, int period, int barsAgo) {
+        List<CandleData> hist = historyMap.get(key);
+        if (hist == null || hist.size() < period + barsAgo + 1) return 50.0;
+        int endIndex = hist.size() - 1 - barsAgo;
+        
+        double gain = 0.0;
+        double loss = 0.0;
+        
+        for (int i = endIndex - period + 1; i <= endIndex; i++) {
+            double diff = hist.get(i).getClose() - hist.get(i - 1).getClose();
+            if (diff > 0) gain += diff;
+            else loss -= diff;
+        }
+        
+        if (gain + loss == 0) return 50.0;
+        return 100.0 * (gain / (gain + loss));
+    }
+
+    public double getMaDeviationRate(MarketKey key, int period, int barsAgo) {
+        double currentClose = getPastCandleClose(key, barsAgo);
+        double ma = getPastMA(key, period, barsAgo);
+        if (ma == 0) return 0.0;
+        return (currentClose - ma) / ma * 100.0;
     }
 }
