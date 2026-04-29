@@ -8,40 +8,51 @@ import com.example.cryptotool.model.SignalDecision;
 import com.example.cryptotool.model.response.ChartInitResponse.CandleData;
 import com.example.cryptotool.model.response.RealtimeUpdateDto.SignalType;
 import com.example.cryptotool.service.core.MarketDataStore;
+import com.example.cryptotool.service.core.MarketRegimeService;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * 【戦略700系】XGBoostによる予測モデリング戦略
+ * 【戦略800系】XGBoost予測 ＋ HMM(市場レジーム)フィルター戦略
  */
 @Component
 @RequiredArgsConstructor
-public class XGBoostStrategy implements TradingStrategy {
+public class XgbHmmStrategy implements TradingStrategy {
 
     private final MlPredictionClient mlClient;
+    // ▼ HMMの判定結果を取得するために追加
+    private final MarketRegimeService regimeService; 
+
     private static final double PROBABILITY_THRESHOLD_BUY = 0.75;
     private static final double PROBABILITY_THRESHOLD_SELL = 0.25;
 
     @Override
-    public int getStrategyId() { return 700; }
+    public int getStrategyId() { return 800; }
 
     @Override
     public SignalDecision checkEntry(MarketKey key, CandleData current, MarketDataStore dataStore) {
         double[] features = buildFeatureVector(key, current, dataStore);
         double upProbability = mlClient.getPredictionProbability(features);
         
-     // ▼▼▼ ここに追記（ログ出力） ▼▼▼
-        System.out.println(String.format("【AI推論】%s - 上昇確率: %.2f", key, upProbability));
-        // ▲▲▲ ここまで ▲▲▲
+        // ▼▼▼ HMMによる市場レジームの取得 ▼▼▼
+        String regimeName = regimeService.detectRegime(key, dataStore).name();
         
+        System.out.println(String.format("【AI推論/戦略800】%s - 上昇確率: %.2f / レジーム: %s", key, upProbability, regimeName));
+
+        // 💡【HMMフィルター】レンジ相場なら、XGBoostがなんと言おうとダマシ回避のため見送り！
+        if ("RANGE".equals(regimeName)) {
+            return null; 
+        }
+
+        // HMMのフィルターを通過した場合のみ、XGBoostの確率で売買判定
         if (upProbability >= PROBABILITY_THRESHOLD_BUY) {
             double sl = current.getClose() - (dataStore.getATR(key, 14, 0) * 2);
-            return new SignalDecision(SignalType.BUY, 701, "【戦略701】XGBoost上昇予測(" + String.format("%.2f", upProbability) + ")", 0.0, sl);
+            return new SignalDecision(SignalType.BUY, 801, "【戦略801】XGBoost上昇予測(" + String.format("%.2f", upProbability) + ") + トレンド確認", 0.0, sl);
         }
 
         if (upProbability <= PROBABILITY_THRESHOLD_SELL) {
             double sl = current.getClose() + (dataStore.getATR(key, 14, 0) * 2);
-            return new SignalDecision(SignalType.SELL, 702, "【戦略702】XGBoost下落予測(" + String.format("%.2f", upProbability) + ")", 0.0, sl);
+            return new SignalDecision(SignalType.SELL, 802, "【戦略802】XGBoost下落予測(" + String.format("%.2f", upProbability) + ") + トレンド確認", 0.0, sl);
         }
 
         return null;
@@ -53,14 +64,14 @@ public class XGBoostStrategy implements TradingStrategy {
         double upProbability = mlClient.getPredictionProbability(features);
 
         if ("LONG".equals(position) && upProbability < 0.40) {
-            return new SignalDecision(SignalType.SELL, 701, "【利確/損切】予測確率低下によるエグジット");
+            return new SignalDecision(SignalType.SELL, 801, "【利確/損切】予測確率低下によるエグジット");
         } else if ("SHORT".equals(position) && upProbability > 0.60) {
-            return new SignalDecision(SignalType.BUY, 702, "【利確/損切】予測確率上昇によるエグジット");
+            return new SignalDecision(SignalType.BUY, 802, "【利確/損切】予測確率上昇によるエグジット");
         }
         return null;
     }
 
- // ▼ Python側の新しいAIモデルに合わせて、特徴量の計算式を最新版（普遍的パーセント）に修正
+    // ▼ Python側の新しいAIモデルに合わせて、特徴量の計算式を最新版（普遍的パーセント）に修正
     private double[] buildFeatureVector(MarketKey key, CandleData current, MarketDataStore dataStore) {
         double rsi = dataStore.getRSI(key, 14, 0);
         double stdDev = dataStore.getStdDev(key, 20, 0);

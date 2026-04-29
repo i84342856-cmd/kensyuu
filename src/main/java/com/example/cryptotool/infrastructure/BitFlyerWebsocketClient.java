@@ -1,8 +1,6 @@
 package com.example.cryptotool.infrastructure;
 
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -93,18 +91,15 @@ public class BitFlyerWebsocketClient extends TextWebSocketHandler implements Ini
         this.currentSession = session;
         this.isConnecting.set(false); 
         
-        log.info("🌐 bitFlyer WebSocket接続完了！リアルタイム購読を開始します...");
+        log.info("🌐 bitFlyer WebSocket接続完了！全通貨のリアルタイム購読を開始します...");
         session.setTextMessageSizeLimit(1024 * 1024);
 
-        List<String> validPairs = Arrays.asList("BTC_JPY", "FX_BTC_JPY", "ETH_JPY", "XRP_JPY", "MONA_JPY", "XLM_JPY");
-
+        // 手動のリスト(validPairs)を廃止し、すべてのSymbolを対象にする
         for (Symbol symbol : Symbol.values()) {
-            if (validPairs.contains(symbol.name())) {
-                String channelName = "lightning_executions_" + symbol.name();
-                String subscribeMessage = String.format(
-                        "{\"jsonrpc\":\"2.0\",\"method\":\"subscribe\",\"id\":1,\"params\":{\"channel\":\"%s\"}}", channelName);
-                session.sendMessage(new TextMessage(subscribeMessage));
-            }
+            String channelName = "lightning_executions_" + symbol.name();
+            String subscribeMessage = String.format(
+                    "{\"jsonrpc\":\"2.0\",\"method\":\"subscribe\",\"id\":1,\"params\":{\"channel\":\"%s\"}}", channelName);
+            session.sendMessage(new TextMessage(subscribeMessage));
         }
     }
 

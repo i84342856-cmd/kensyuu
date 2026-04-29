@@ -68,7 +68,16 @@ public class MarketDataServiceImpl implements MarketDataService {
 
     private final Map<String, Boolean> strategySettings = new ConcurrentHashMap<>();
 
-    private boolean isTargetSymbol(Symbol s) { return s == Symbol.BTC_JPY || s == Symbol.FX_BTC_JPY; }
+    private boolean isTargetSymbol(Symbol s) { 
+        // bitFlyer Lightning（取引所）でリアルタイムデータが配信されている銘柄に限定
+        return s == Symbol.BTC_JPY || 
+               s == Symbol.FX_BTC_JPY || 
+               s == Symbol.ETH_JPY || 
+               s == Symbol.XRP_JPY || 
+               s == Symbol.LTC_JPY || 
+               s == Symbol.BCH_JPY || 
+               s == Symbol.MONA_JPY;
+    }
 
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
@@ -127,9 +136,11 @@ public class MarketDataServiceImpl implements MarketDataService {
                             entryStrategyMap.put(key, 0);
                             entryCandleTimeMap.put(key, 0L);
                         }
+                     // 修正後
                         lastOrderTimeMap.put(key, 0L);
                         monitorSettings.put(key.toString(), true);
-                        Thread.sleep(3000);
+                        // 2000ms（2秒）がAPI制限を回避するための安全圏です
+                        Thread.sleep(2000);
                     }
                 }
                 isSystemReady = true;
@@ -225,13 +236,35 @@ public class MarketDataServiceImpl implements MarketDataService {
         double aiProb = 0.5;
         String regimeName = "UNKNOWN";
         try {
-            // ダミーの全0ではなく、実際の市場データから特徴量を抽出してPythonに送る
             double rsi = dataStore.getRSI(key, 14, 0);
             double stdDev = dataStore.getStdDev(key, 20, 0);
             double maDev = dataStore.getMaDeviationRate(key, 20, 0);
             
-            // Pythonへ送る配列（XGBoostStrategyのbuildFeatureVectorと項目を合わせるとより正確です）
-            double[] features = new double[]{ rsi, stdDev, maDev, 0, 0, 0, 0, 0, 0 };
+            double ma5 = dataStore.getPastMA(key, 5, 0);
+            double ma25 = dataStore.getPastMA(key, 25, 0);
+            double f4_macd = (ma25 != 0) ? ((ma5 - ma25) / ma25) * 100 : 0; 
+            
+            double open = current.getOpen();
+            double close = current.getClose();
+            double high = current.getHigh();
+            double low = current.getLow();
+            double f5_body = (close != 0) ? (Math.abs(close - open) / close) * 100 : 0; 
+            double f6_upper = (close != 0) ? ((high - Math.max(open, close)) / close) * 100 : 0; 
+            double f7_lower = (close != 0) ? ((Math.min(open, close) - low) / close) * 100 : 0; 
+            
+            // 💡【工夫1】StdDevを価格に対するパーセント（ボラティリティ率）に変換
+            double stdDevPct = (close != 0) ? (stdDev / close) * 100 : 0;
+
+            // 💡【工夫2】Volumeを1本前の足との比率（出来高変化率）に変換
+            double prevVol = 0;
+            java.util.List<CandleData> history = dataStore.getHistoryMap().get(key);
+            if (history != null && !history.isEmpty()) {
+                prevVol = history.get(history.size() - 1).getVolume();
+            }
+            double volRatio = (prevVol != 0) ? (current.getVolume() / prevVol) * 100 : 100;
+            
+            // Pythonへデータを送信（すべてが普遍的なパーセント指標になりました）
+            double[] features = new double[]{ rsi, stdDevPct, maDev, f4_macd, f5_body, f6_upper, f7_lower, volRatio, 0 };
             
             aiProb = mlClient.getPredictionProbability(features);
             regimeName = regimeService.detectRegime(key, dataStore).name();
@@ -239,7 +272,7 @@ public class MarketDataServiceImpl implements MarketDataService {
             log.warn("画面表示用のAI推論でエラー: {}", e.getMessage());
         }
         // --- ▲ ここまで ▲ ---
-
+        
         // WebSocketでフロントエンドにデータを送信
         messagingTemplate.convertAndSend("/topic/" + key.toString(), RealtimeUpdateDto.builder()
                 .currentCandle(current)
