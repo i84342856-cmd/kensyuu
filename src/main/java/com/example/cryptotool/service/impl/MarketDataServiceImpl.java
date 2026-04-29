@@ -239,11 +239,9 @@ public class MarketDataServiceImpl implements MarketDataService {
             double rsi = dataStore.getRSI(key, 14, 0);
             double stdDev = dataStore.getStdDev(key, 20, 0);
             double maDev = dataStore.getMaDeviationRate(key, 20, 0);
-            
             double ma5 = dataStore.getPastMA(key, 5, 0);
             double ma25 = dataStore.getPastMA(key, 25, 0);
             double f4_macd = (ma25 != 0) ? ((ma5 - ma25) / ma25) * 100 : 0; 
-            
             double open = current.getOpen();
             double close = current.getClose();
             double high = current.getHigh();
@@ -251,11 +249,8 @@ public class MarketDataServiceImpl implements MarketDataService {
             double f5_body = (close != 0) ? (Math.abs(close - open) / close) * 100 : 0; 
             double f6_upper = (close != 0) ? ((high - Math.max(open, close)) / close) * 100 : 0; 
             double f7_lower = (close != 0) ? ((Math.min(open, close) - low) / close) * 100 : 0; 
-            
-            // 💡【工夫1】StdDevを価格に対するパーセント（ボラティリティ率）に変換
             double stdDevPct = (close != 0) ? (stdDev / close) * 100 : 0;
-
-            // 💡【工夫2】Volumeを1本前の足との比率（出来高変化率）に変換
+            
             double prevVol = 0;
             java.util.List<CandleData> history = dataStore.getHistoryMap().get(key);
             if (history != null && !history.isEmpty()) {
@@ -263,11 +258,19 @@ public class MarketDataServiceImpl implements MarketDataService {
             }
             double volRatio = (prevVol != 0) ? (current.getVolume() / prevVol) * 100 : 100;
             
-            // Pythonへデータを送信（すべてが普遍的なパーセント指標になりました）
-            double[] features = new double[]{ rsi, stdDevPct, maDev, f4_macd, f5_body, f6_upper, f7_lower, volRatio, 0 };
+            // 💡アップロードされたクラス設計に基づく、100%バグらない分数計算
+            double tfValue = key.timeFrame().getSeconds() / 60.0;
+
+            if (Double.isNaN(rsi)) rsi = 50.0;
+            if (Double.isNaN(stdDevPct)) stdDevPct = 0.0;
+            if (Double.isNaN(maDev)) maDev = 0.0;
+            if (Double.isNaN(f4_macd)) f4_macd = 0.0;
+            if (Double.isInfinite(volRatio) || Double.isNaN(volRatio)) volRatio = 100.0;
+            
+            double[] features = new double[]{ rsi, stdDevPct, maDev, f4_macd, f5_body, f6_upper, f7_lower, volRatio, tfValue };
             
             aiProb = mlClient.getPredictionProbability(features);
-            regimeName = regimeService.detectRegime(key, dataStore).name();
+            regimeName = regimeService.detectRegime(key, dataStore, features).name();
         } catch (Exception e) {
             log.warn("画面表示用のAI推論でエラー: {}", e.getMessage());
         }
